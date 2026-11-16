@@ -13,6 +13,10 @@ icon = "icon.png"
 name = "ai.aws.bedrock.agentcore"
 export = true
 
+[[package.modules]]
+name = "ai.aws.bedrock.agentcore"
+export = true
+
 [build-options]
 observabilityIncluded = true
 
