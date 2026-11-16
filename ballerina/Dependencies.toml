@@ -457,7 +457,8 @@ dependencies = [
 	{org = "ballerinax", name = "aws"}
 ]
 modules = [
-	{org = "ballerinax", packageName = "ai.aws.bedrock", moduleName = "ai.aws.bedrock"}
+	{org = "ballerinax", packageName = "ai.aws.bedrock", moduleName = "ai.aws.bedrock"},
+	{org = "ballerinax", packageName = "ai.aws.bedrock", moduleName = "ai.aws.bedrock.agentcore"}
 ]
 
 [[package]]
