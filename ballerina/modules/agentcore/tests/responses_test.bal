@@ -92,6 +92,11 @@ function startResponsesListener() returns error? {
                 "stream" => {
                     return new stream<string, error?>(new ClosableStream());
                 }
+                "cyclic" => {
+                    map<anydata> cyclic = {};
+                    cyclic["self"] = cyclic;
+                    return cyclic;
+                }
             }
             return "unknown";
         }
@@ -169,6 +174,34 @@ function testStreamIsClosedAnd500() returns error? {
     lock {
         test:assertTrue(streamClosed);
     }
+}
+
+@test:Config
+function testCyclicResultIs500() returns error? {
+    check assertRawJson(check invokeKind("cyclic"), 500, "{\"error\":\"Internal server error\"}");
+}
+
+const ISOLATED_PORT = 19504;
+
+@test:Config
+function testIsolatedServiceRunsAndPanics() returns error? {
+    Listener agentCoreListener = check new (ISOLATED_PORT);
+    Service isolatedService = isolated service object {
+        isolated resource function get ping() returns PingStatus => HEALTHY;
+
+        isolated resource function post invocations(@http:Payload ResultRequest request) returns json {
+            if request.kind == "panic" {
+                panic error("isolated boom");
+            }
+            return request.kind;
+        }
+    };
+    check agentCoreListener.attach(isolatedService);
+    check agentCoreListener.'start();
+    http:Client cl = check new (string `http://localhost:${ISOLATED_PORT}`, timeout = 10);
+    check assertRawJson(check postInvocation(cl, {kind: "ok"}), 200, "\"ok\"");
+    check assertRawJson(check postInvocation(cl, {kind: "panic"}), 500, "{\"error\":\"Internal server error\"}");
+    check agentCoreListener.immediateStop();
 }
 
 @test:Config

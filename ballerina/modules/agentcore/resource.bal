@@ -19,6 +19,7 @@ import ballerina/http;
 import ballerina/jballerina.java;
 import ballerina/log;
 
+// http-protocol-contract: the platform calls `GET /ping` and `POST /invocations`.
 const PING_PATH = "ping";
 const INVOCATIONS_PATH = "invocations";
 
@@ -54,7 +55,7 @@ isolated function bindPayload(http:Request request, typedesc<anydata> payloadTyp
 }
 
 # Binds the body to the declared type: `byte[]` gets the raw bytes; any other type is parsed from JSON,
-# as `py/runtime/app.py:546` reads every body as JSON.
+# as `py/runtime/app.py:547` reads every body as JSON.
 #
 # + body - The request body
 # + payloadType - The declared payload type

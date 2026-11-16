@@ -27,6 +27,10 @@ function testTriggerMetadataMatchesDispatcher() returns error? {
     json[] listeners = check (check metadata.listeners).ensureType();
     test:assertEquals(check listeners[0].'type.name, "Listener");
     test:assertEquals(check listeners[0].'type.packageInfo.moduleName, "ai.aws.bedrock.agentcore");
+    // The metadata names the package version, so a version bump must update it too.
+    string ballerinaToml = check io:fileReadString("Ballerina.toml");
+    string version = check listeners[0].'type.packageInfo.version;
+    test:assertTrue(ballerinaToml.includes(string `version = "${version}"`), version);
 
     json[] serviceTypes = check (check metadata.serviceTypes).ensureType();
     test:assertEquals(check serviceTypes[0].'type.name, "Service");

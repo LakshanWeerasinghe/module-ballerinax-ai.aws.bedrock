@@ -16,6 +16,7 @@
 
 import ballerina/ai;
 import ballerina/http;
+import ballerina/log;
 import ballerinax/ai.aws.bedrock;
 import ballerinax/ai.aws.bedrock.agentcore;
 import ballerinax/aws.auth;
@@ -28,6 +29,8 @@ type Prompt record {
     string prompt;
 };
 
+final ai:ShortTermMemory memory = check new;
+
 final ai:Agent agent = check new ({
     systemPrompt: {
         role: "Helpful Assistant",
@@ -35,9 +38,9 @@ final ai:Agent agent = check new ({
     },
     // The default credential chain picks up the AgentCore execution role through the instance metadata service.
     model: check new bedrock:ConverseModelProvider(modelId, auth:DEFAULT_CREDENTIALS, region),
-    // In-memory history, kept per memory key (see below). AgentCore gives each session its own microVM, which keeps
-    // it for up to 8 hours; use a persistent `ai:ShortTermMemoryStore` to keep history beyond that.
-    memory: check new ai:ShortTermMemory()
+    // In-memory history, kept per memory key (see below). AgentCore gives each session its own microVM, which ends
+    // after 15 idle minutes or 8 hours at most; use a persistent `ai:ShortTermMemoryStore` to keep history beyond that.
+    memory
 });
 
 // `ai:Agent.run` requires the calls for one memory key to run one after another. A `lock` on an isolated object holds
@@ -69,6 +72,16 @@ isolated function conversationTurns(string memoryKey) returns ConversationTurns 
     }
 }
 
+isolated function forgetConversation(string memoryKey) {
+    lock {
+        _ = conversations.removeIfHasKey(memoryKey);
+    }
+    ai:MemoryError? deleted = memory.delete(memoryKey);
+    if deleted is ai:MemoryError {
+        log:printWarn("Dropping the conversation history failed", deleted);
+    }
+}
+
 // Listens on 8080, the port AgentCore Runtime calls.
 listener agentcore:Listener agentCoreListener = new;
 
@@ -81,7 +94,11 @@ service on agentCoreListener {
         // One history per user and session. A call without a session ID gets the request ID, so sessionless calls
         // never share history. The JSON array keeps different pairs apart whatever characters the IDs contain.
         string memoryKey = [ctx.userId, ctx.sessionId ?: ctx.requestId].toJsonString();
-        string reply = check conversationTurns(memoryKey).run(payload.prompt, memoryKey);
-        return {response: reply};
+        string|error reply = conversationTurns(memoryKey).run(payload.prompt, memoryKey);
+        if ctx.sessionId is () {
+            // A sessionless call is never continued, so its history is dropped.
+            forgetConversation(memoryKey);
+        }
+        return {response: check reply};
     }
 }

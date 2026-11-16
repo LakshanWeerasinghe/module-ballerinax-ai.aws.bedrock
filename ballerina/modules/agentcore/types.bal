@@ -55,7 +55,7 @@ public enum PingStatus {
 # + oauth2CallbackUrl - The OAuth2 callback URL for AgentCore Identity
 # + authorization - The inbound `Authorization` header (with a custom JWT authorizer)
 # + customHeaders - The allowlisted custom headers, keyed by lower-case name
-# + requestHeaders - The request headers AgentCore lets agent code see
+# + requestHeaders - The request headers agent code may see, keyed by lower-case name (`Authorization` as is)
 # + headers - The raw request headers
 public type Context record {|
     string? sessionId = ();

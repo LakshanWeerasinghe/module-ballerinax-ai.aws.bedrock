@@ -44,7 +44,7 @@ docker push <ACCOUNT_ID>.dkr.ecr.<REGION>.amazonaws.com/agentcore-runtime-agent:
 
 ## Create the runtime
 
-The execution role must allow AgentCore to pull the image, write logs, and call `bedrock:InvokeModel` (and `bedrock:InvokeModelWithResponseStream` if you stream) on the model you configure. See [the runtime permissions](https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/runtime-permissions.html).
+The execution role must allow AgentCore to pull the image, write logs, and call `bedrock:InvokeModel` on the model you configure. For a cross-region inference profile ID, such as `us.amazon.nova-micro-v1:0`, allow the profile and the underlying model in each Region it routes to. See [the runtime permissions](https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/runtime-permissions.html).
 
 ```bash
 aws bedrock-agentcore-control create-agent-runtime \
@@ -61,7 +61,7 @@ aws bedrock-agentcore-control create-agent-runtime \
 
 Since June 30, 2026, AgentCore Runtime rejects invocations of a runtime whose `metadataConfiguration.requireMMDSV2` is not `true` ([troubleshooting](https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/runtime-troubleshooting.html)). The setting is accepted only by `UpdateAgentRuntime`: in the AWS API model (botocore `bedrock-agentcore-control`), `metadataConfiguration` is a member of `UpdateAgentRuntimeRequest`, not of `CreateAgentRuntimeRequest`.
 
-Update the runtime once it is created, and invoke it only after the update. Re-send every field the create call set: the API model doesn't say whether omitted optional fields are kept, and losing the environment variables would stop the agent at startup. If you set `--request-header-configuration` or other options on create, send them again too.
+Update the runtime once it is created, and invoke it only after the update. Re-send every field the create call set: the API model doesn't say whether omitted optional fields are kept, and losing the environment variables would stop the agent at startup. If you set `--request-header-configuration` or other options on create, send them again too. The troubleshooting page's sample passes only the runtime ID and `metadataConfiguration`; the AWS CLI and boto3 reject that call, because `agentRuntimeArtifact` and `roleArn` are required.
 
 ```bash
 aws bedrock-agentcore-control update-agent-runtime \
@@ -78,7 +78,7 @@ aws bedrock-agentcore-control get-agent-runtime --region <REGION> --agent-runtim
   --query '{status: status, requireMMDSV2: metadataConfiguration.requireMMDSV2, env: keys(environmentVariables)}'
 ```
 
-Wait until the status is `READY`. The default credential chain reads the execution role from the metadata service with IMDSv2 session tokens, which MMDSv2 requires.
+Wait until the status is `READY`. The default credential chain reads the execution role from the metadata service.
 
 ## Configuration through environment variables
 
@@ -102,7 +102,7 @@ aws bedrock-agentcore invoke-agent-runtime \
 cat response.json
 ```
 
-Add `--runtime-user-id <USER_ID>` to call the agent on behalf of a user; the agent then sees `ctx.userId` and keeps a separate history for that user.
+Add `--runtime-user-id <USER_ID>` to call the agent on behalf of a user; the agent then sees `ctx.userId` and keeps a separate history for that user. The caller then needs both `bedrock-agentcore:InvokeAgentRuntime` and `bedrock-agentcore:InvokeAgentRuntimeForUser` ([API reference](https://docs.aws.amazon.com/bedrock-agentcore/latest/APIReference/API_InvokeAgentRuntime.html)).
 
 With boto3:
 

@@ -169,11 +169,12 @@ isolated function contextFromRequest(http:Request request) returns Context {
         if lower.startsWith(CUSTOM_PREFIX_LOWER) {
             customHeaders[lower] = value;
         }
-        // `py/runtime/app.py:430-434`: Authorization is kept under its canonical name; the rest follow the allowlist.
+        // `py/runtime/app.py:430-434`: Authorization is kept under its canonical name; the rest follow the allowlist,
+        // keyed by lower-case name as Starlette's `headers.items()` yields them.
         if lower == AUTHORIZATION_LOWER {
             requestHeaders[HEADER_AUTHORIZATION] = value;
         } else if isForwardableHeader(lower) {
-            requestHeaders[name] = value;
+            requestHeaders[lower] = value;
         }
     }
     return {

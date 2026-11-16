@@ -57,6 +57,7 @@ isolated function currentPing() returns PingStatus|error {
 
 const PING_PORT = 19401;
 const NO_PING_PORT = 19402;
+const PING_PARAMS_PORT = 19403;
 
 final Listener pingListener = check new (PING_PORT);
 
@@ -147,5 +148,19 @@ function testPingWithoutResource() returns error? {
     map<json> body = check ping(NO_PING_PORT);
     test:assertEquals(body["status"], "Healthy");
     test:assertTrue(body["time_of_last_update"] is int);
+    check agentCoreListener.immediateStop();
+}
+
+@test:Config
+function testPingWithParametersReportsHealthyWithoutTimestamp() returns error? {
+    // The compiler plugin rejects ping parameters; the listener still never calls the resource with nil.
+    Listener agentCoreListener = check new (PING_PARAMS_PORT);
+    check agentCoreListener.attach(service object {
+        resource function get ping(Context ctx) returns PingStatus => HEALTHY_BUSY;
+
+        resource function post invocations() returns json => "ok";
+    });
+    check agentCoreListener.'start();
+    test:assertEquals(check ping(PING_PARAMS_PORT), {status: "Healthy"});
     check agentCoreListener.immediateStop();
 }

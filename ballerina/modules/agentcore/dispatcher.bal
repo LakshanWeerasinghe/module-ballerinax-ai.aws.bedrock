@@ -40,7 +40,15 @@ isolated service class DispatcherService {
         if signature is () {
             return pingResponse(HEALTHY, self.pingTracker.timeOfLastUpdate(HEALTHY));
         }
-        any|error result = signature is error ? signature : invokeResource(self, http:HTTP_GET, [PING_PATH], (), ());
+        any|error result;
+        if signature is error {
+            result = signature;
+        } else if signature.payloadType !is () || signature.hasContext {
+            // The compiler plugin rejects ping parameters; a service that slips past it is never called with nil.
+            result = error("the 'get ping' resource must declare no parameters");
+        } else {
+            result = invokeResource(self, http:HTTP_GET, [PING_PATH], (), ());
+        }
         if result is PingStatus {
             return pingResponse(result, self.pingTracker.timeOfLastUpdate(result));
         }
@@ -132,7 +140,7 @@ isolated function toInvocationResponse(any|error result, Context context) return
         return errorResultResponse(result, context);
     }
     if result is anydata {
-        return jsonResponse(result);
+        return jsonResponse(result, context);
     }
     if result is InvocationResponse {
         return result;
@@ -148,14 +156,20 @@ isolated function toInvocationResponse(any|error result, Context context) return
             context);
 }
 
-# Sends any `anydata` value, including `()` and `string`, as `200 application/json`, as `py/runtime/app.py:597-600`
-# does with `json.dumps`. Built explicitly so the http module doesn't answer a `post` resource with `201`.
+# Sends any `anydata` value, including `()` and `string`, as `200 application/json`.
 #
 # + value - The value
+# + context - The request context, for logging
 # + return - The response
-isolated function jsonResponse(anydata value) returns http:Response {
+isolated function jsonResponse(anydata value, Context context) returns http:Response {
+    // As `py/runtime/app.py:600-601` does with `json.dumps`. Built explicitly so the http module doesn't answer a
+    // `post` resource with `201`. A cyclic value can't be serialized, and `toJsonString` panics on it.
+    string|error body = trap value.toJsonString();
+    if body is error {
+        return errorResultResponse(body, context);
+    }
     http:Response response = new;
-    response.setTextPayload(value.toJsonString(), APPLICATION_JSON);
+    response.setTextPayload(body, APPLICATION_JSON);
     return response;
 }
 
@@ -171,15 +185,15 @@ isolated function errorResponse(int statusCode, string message) returns http:Res
     return response;
 }
 
-# Maps an error of the user's resource to a response. A 4xx `httpscerr` error keeps its status and message; anything
-# else gets its status (500 for a plain error) and a generic message, since AgentCore shows the caller only a 424 and
-# the message could leak internals. The error and its cause chain are logged: CloudWatch is the only place to
-# diagnose a 424.
+# Maps an error of the user's resource to a response.
 #
 # + err - The error
 # + context - The request context, for logging
 # + return - The response
 isolated function errorResultResponse(error err, Context context) returns http:Response {
+    // A 4xx `httpscerr` error keeps its status and message. Anything else gets its status (500 for a plain error) and
+    // a generic message: AgentCore shows the caller only a 424, and the message could leak internals. The error and its
+    // cause chain are logged, since CloudWatch is the only place to diagnose a 424.
     int statusCode = statusCodeOf(err);
     if statusCode < 500 {
         log:printWarn("The invocation was rejected", err, requestId = context.requestId,

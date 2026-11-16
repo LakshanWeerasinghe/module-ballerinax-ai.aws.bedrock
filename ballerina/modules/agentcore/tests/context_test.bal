@@ -84,10 +84,13 @@ function testContextMapsEveryField() returns error? {
     test:assertEquals(ctx["customHeaders"], {"x-amzn-bedrock-agentcore-runtime-custom-tenant": "tenant-a"});
     map<json> requestHeaders = check ctx["requestHeaders"].ensureType();
     test:assertEquals(requestHeaders[HEADER_AUTHORIZATION], "Bearer dummy-jwt");
-    test:assertEquals(valueIgnoringCase(requestHeaders, "x-custom-app"), "app-1");
-    test:assertEquals(valueIgnoringCase(requestHeaders, "x-amzn-bedrock-agentcore-runtime-custom-tenant"), "tenant-a");
+    test:assertEquals(requestHeaders["x-custom-app"], "app-1");
+    test:assertEquals(requestHeaders["x-amzn-bedrock-agentcore-runtime-custom-tenant"], "tenant-a");
     // `py/runtime/models.py:192-194`: the WAT header is the one `x-amz-` header agent code may see.
-    test:assertEquals(valueIgnoringCase(requestHeaders, HEADER_IDENTITY_WAT), "dummy-wat");
+    test:assertEquals(requestHeaders["x-amz-bedrock-agentcore-identity-wat"], "dummy-wat");
+    foreach string key in requestHeaders.keys() {
+        test:assertTrue(key == HEADER_AUTHORIZATION || key == key.toLowerAscii(), key);
+    }
 }
 
 @test:Config
@@ -151,8 +154,7 @@ function testRestrictedHeadersExcluded() returns error? {
             HEADER_USER_ID.toLowerAscii()] {
         test:assertEquals(valueIgnoringCase(requestHeaders, name), (), name);
     }
-    test:assertEquals(valueIgnoringCase(requestHeaders, "traceparent"),
-        "00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01");
+    test:assertEquals(requestHeaders["traceparent"], "00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01");
 }
 
 @test:Config

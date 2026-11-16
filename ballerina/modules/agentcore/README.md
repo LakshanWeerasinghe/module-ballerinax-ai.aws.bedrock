@@ -53,6 +53,8 @@ AgentCore shows the caller a `424` for any 4xx or 5xx from the agent, so the lis
 
 `new agentcore:Listener()` listens on 8080. Pass a port, or an `http:Listener` to share. The `http:ListenerConfiguration` fields apply, with defaults suited to AgentCore: a 900-second timeout (AgentCore allows 15-minute synchronous requests) and 96 KB of request headers.
 
+A shared `http:Listener` keeps its own configuration. Give it `timeout: 900` and `requestLimits: {maxHeaderSize: 98304}`, or the http defaults end agent turns longer than 60 seconds and reject requests with more than 8 KB of headers.
+
 Streaming responses, a custom invocation path and WebSocket are not supported yet.
 
 See the [AgentCore Runtime agent example](https://github.com/ballerina-platform/module-ballerinax-ai.aws.bedrock/tree/main/examples/agentcore-runtime-agent) for building, deploying and invoking an agent.

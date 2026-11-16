@@ -168,6 +168,8 @@ public final class NativeResourceInvoker {
         } catch (BError error) {
             // A panic that escaped the dispatcher would leave the request without a response.
             return error;
+        } catch (Throwable throwable) {
+            return callFailed(throwable);
         }
     }
 
@@ -190,9 +192,7 @@ public final class NativeResourceInvoker {
             } catch (BError error) {
                 result.complete(error);
             } catch (Throwable throwable) {
-                // Only the class is named: the message could quote anything.
-                result.complete(ErrorCreator.createError(StringUtils.fromString(
-                        "calling the agentcore:Service resource failed with " + throwable.getClass().getName())));
+                result.complete(callFailed(throwable));
             }
         });
         try {
@@ -206,6 +206,12 @@ public final class NativeResourceInvoker {
             return ErrorCreator.createError(StringUtils.fromString(
                     "waiting for the agentcore:Service resource failed"));
         }
+    }
+
+    // Only the class is named: the message could quote anything.
+    private static BError callFailed(Throwable throwable) {
+        return ErrorCreator.createError(StringUtils.fromString(
+                "calling the agentcore:Service resource failed with " + throwable.getClass().getName()));
     }
 
     /**

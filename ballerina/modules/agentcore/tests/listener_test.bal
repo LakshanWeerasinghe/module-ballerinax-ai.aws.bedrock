@@ -152,6 +152,32 @@ function testGracefulStop() returns error? {
     test:assertTrue(afterStop is error);
 }
 
+// runtime-header-allowlist: up to 20 custom headers of up to 4 KB each.
+@test:Config
+function testLargeAllowlistedHeadersAccepted() returns error? {
+    map<string> headers = {};
+    foreach int i in 1 ... 20 {
+        headers[string `X-Amzn-Bedrock-AgentCore-Runtime-Custom-H${i}`] = string:'join("", ...from int _ in 0 ..< 4000 select "a");
+    }
+    Listener agentCoreListener = check new (19109);
+    check agentCoreListener.attach(newPingService());
+    check agentCoreListener.'start();
+    http:Client cl = check new ("http://localhost:19109");
+    http:Response response = check cl->post("/invocations", {}, headers);
+    test:assertEquals(response.statusCode, 200);
+    check agentCoreListener.immediateStop();
+
+    // The http default of 8 KB rejects the same request.
+    http:Listener httpListener = check new (19110);
+    Listener sharing = check new (httpListener);
+    check sharing.attach(newPingService());
+    check httpListener.'start();
+    http:Client defaultClient = check new ("http://localhost:19110");
+    response = check defaultClient->post("/invocations", {}, headers);
+    test:assertEquals(response.statusCode, 431);
+    check httpListener.immediateStop();
+}
+
 @test:Config
 function testListenerConfigurationDefaults() {
     ListenerConfiguration config = {};
