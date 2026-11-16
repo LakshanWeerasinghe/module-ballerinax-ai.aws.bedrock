@@ -30,7 +30,7 @@ public type Service distinct service object {
 public type ListenerConfiguration record {|
     *http:ListenerConfiguration;
     // bedrock-agentcore-limits: synchronous requests time out after 15 minutes. The http default of 60 seconds
-    // would end a longer agent turn with a 504 before AgentCore gives up.
+    // would end a longer agent turn before AgentCore gives up.
     decimal timeout = 900;
     // runtime-header-allowlist: up to 20 custom headers of up to 4 KB each, on top of the platform headers and a
     // JWT. The http default of 8 KB would reject such a request with a 431.
