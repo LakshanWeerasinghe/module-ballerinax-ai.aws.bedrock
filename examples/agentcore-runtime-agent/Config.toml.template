@@ -1,0 +1,4 @@
+# Copy this file to Config.toml for a local run. Config.toml is git-ignored; never commit it or copy it into a
+# container image. On AgentCore Runtime, set BAL_CONFIG_VAR_MODELID and BAL_CONFIG_VAR_REGION instead.
+modelId = "<BEDROCK_MODEL_OR_INFERENCE_PROFILE_ID>"
+region = "<AWS_REGION>"
