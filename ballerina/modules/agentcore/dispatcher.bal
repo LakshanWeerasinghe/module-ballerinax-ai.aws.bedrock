@@ -16,9 +16,14 @@
 
 import ballerina/http;
 import ballerina/log;
+import ballerina/time;
 
 const APPLICATION_JSON = "application/json";
 const INTERNAL_SERVER_ERROR_MESSAGE = "Internal server error";
+
+# What `post invocations` sends: a built response, or a status-code record the http module maps as it would for the
+# user's own resource.
+type InvocationResponse http:Response|http:StatusCodeResponse;
 
 # The internal service the listener attaches in place of the user's `agentcore:Service`. The user's service is
 # linked to it as native data, so it holds no Ballerina mutable state of its own.
@@ -47,15 +52,24 @@ isolated service class DispatcherService {
     #
     # + request - The request
     # + return - The response
-    isolated resource function post invocations(http:Request request) returns http:Response {
+    isolated resource function post invocations(http:Request request) returns InvocationResponse {
+        time:Utc started = time:utcNow();
         Context context = contextFromRequest(request);
+        InvocationResponse response = self.invoke(request, context);
+        int status = response is http:Response ? response.statusCode : response.status.code;
+        log:printInfo("Invocation completed", requestId = context.requestId, sessionId = context.sessionId,
+                status = status, durationMs = <int>(time:utcDiffSeconds(time:utcNow(), started) * 1000));
+        return response;
+    }
+
+    isolated function invoke(http:Request request, Context context) returns InvocationResponse {
         ResourceSignature|error? signature = getResourceSignature(self, http:HTTP_POST, [INVOCATIONS_PATH]);
         if signature is () {
-            return internalErrorResponse(error("the agentcore:Service declares no 'post invocations' resource"),
+            return errorResultResponse(error("the agentcore:Service declares no 'post invocations' resource"),
                     context);
         }
         if signature is error {
-            return internalErrorResponse(signature, context);
+            return errorResultResponse(signature, context);
         }
         anydata payload = ();
         typedesc<anydata>? payloadType = signature.payloadType;
@@ -66,14 +80,7 @@ isolated service class DispatcherService {
             }
             payload = bound;
         }
-        any|error result = invokeResource(self, http:HTTP_POST, [INVOCATIONS_PATH], payload, context);
-        if result is error {
-            return internalErrorResponse(result, context);
-        }
-        if result is anydata {
-            return jsonResponse(result);
-        }
-        return internalErrorResponse(error("the 'post invocations' resource returned a value the listener can't send"),
+        return toInvocationResponse(invokeResource(self, http:HTTP_POST, [INVOCATIONS_PATH], payload, context),
                 context);
     }
 }
@@ -84,7 +91,34 @@ isolated function pingResponse(PingStatus status) returns http:Response {
     return response;
 }
 
-# Sends any `anydata` value as `200 application/json`, as `py/runtime/app.py:597-600` does with `json.dumps`.
+# Maps what the user's `post invocations` resource returned to the response.
+#
+# + result - The return value, or the error it returned or panicked with
+# + context - The request context, for logging
+# + return - The response
+isolated function toInvocationResponse(any|error result, Context context) returns InvocationResponse {
+    if result is error {
+        return errorResultResponse(result, context);
+    }
+    if result is anydata {
+        return jsonResponse(result);
+    }
+    if result is InvocationResponse {
+        return result;
+    }
+    if result is stream<any|error, error?> {
+        // Streaming is not supported yet; the compiler plugin rejects a stream return type.
+        error? closed = result.close();
+        if closed is error {
+            log:printDebug("Closing the unsent stream failed", closed);
+        }
+    }
+    return errorResultResponse(error("the 'post invocations' resource returned a value the listener can't send"),
+            context);
+}
+
+# Sends any `anydata` value, including `()` and `string`, as `200 application/json`, as `py/runtime/app.py:597-600`
+# does with `json.dumps`. Built explicitly so the http module doesn't answer a `post` resource with `201`.
 #
 # + value - The value
 # + return - The response
@@ -106,7 +140,22 @@ isolated function errorResponse(int statusCode, string message) returns http:Res
     return response;
 }
 
-isolated function internalErrorResponse(error err, Context context) returns http:Response {
-    log:printError("The invocation failed", err, requestId = context.requestId, sessionId = context.sessionId);
-    return errorResponse(http:STATUS_INTERNAL_SERVER_ERROR, INTERNAL_SERVER_ERROR_MESSAGE);
+# Maps an error of the user's resource to a response. A 4xx `httpscerr` error keeps its status and message; anything
+# else gets its status (500 for a plain error) and a generic message, since AgentCore shows the caller only a 424 and
+# the message could leak internals. The error and its cause chain are logged: CloudWatch is the only place to
+# diagnose a 424.
+#
+# + err - The error
+# + context - The request context, for logging
+# + return - The response
+isolated function errorResultResponse(error err, Context context) returns http:Response {
+    int statusCode = statusCodeOf(err);
+    if statusCode < 500 {
+        log:printWarn("The invocation was rejected", err, requestId = context.requestId,
+                sessionId = context.sessionId, status = statusCode);
+        return errorResponse(statusCode, err.message());
+    }
+    log:printError("The invocation failed", err, requestId = context.requestId, sessionId = context.sessionId,
+            status = statusCode);
+    return errorResponse(statusCode, INTERNAL_SERVER_ERROR_MESSAGE);
 }
