@@ -1,6 +1,6 @@
 # AgentCore Runtime agent
 
-A Ballerina `ai:Agent` that runs on [Amazon Bedrock AgentCore Runtime](https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/agents-tools-runtime.html) under the [HTTP protocol contract](https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/runtime-http-protocol-contract.html). It uses `bedrock:ConverseModelProvider` with the default AWS credential chain, and keeps one conversation history per user and session.
+A Ballerina `ai:Agent` that runs on [Amazon Bedrock AgentCore Runtime](https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/agents-tools-runtime.html) under the [HTTP protocol contract](https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/runtime-http-protocol-contract.html). It uses `bedrock:ConverseModelProvider` with the default AWS credential chain, and keeps one conversation history per session.
 
 The service accepts `{"prompt": "..."}` on `POST /invocations` and answers `{"response": "..."}`.
 
@@ -57,11 +57,14 @@ aws bedrock-agentcore-control create-agent-runtime \
   --environment-variables BAL_CONFIG_VAR_MODELID=<MODEL_ID>,BAL_CONFIG_VAR_REGION=<REGION>
 ```
 
-### Enable MMDSv2 before the first invocation
+### MMDSv2
 
-Since June 30, 2026, AgentCore Runtime rejects invocations of a runtime whose `metadataConfiguration.requireMMDSV2` is not `true` ([troubleshooting](https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/runtime-troubleshooting.html)). The setting is accepted only by `UpdateAgentRuntime`: in the AWS API model (botocore `bedrock-agentcore-control`), `metadataConfiguration` is a member of `UpdateAgentRuntimeRequest`, not of `CreateAgentRuntimeRequest`.
+Since June 30, 2026, AgentCore Runtime rejects invocations of a runtime whose `metadataConfiguration.requireMMDSV2` is not `true` ([troubleshooting](https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/runtime-troubleshooting.html)).
 
-Update the runtime once it is created, and invoke it only after the update. Re-send every field the create call set: the API model doesn't say whether omitted optional fields are kept, and losing the environment variables would stop the agent at startup. If you set `--request-header-configuration` or other options on create, send them again too. The troubleshooting page's sample passes only the runtime ID and `metadataConfiguration`; the AWS CLI and boto3 reject that call, because `agentRuntimeArtifact` and `roleArn` are required.
+- **Created in the console:** the console sets `requireMMDSV2` to `true` on create without any input, and an edit in the console keeps it. Nothing more to do.
+- **Created with the CLI or API:** `CreateAgentRuntime` has no `metadataConfiguration` parameter; in the AWS API model (botocore `bedrock-agentcore-control`) it is a member of `UpdateAgentRuntimeRequest` only. Update the runtime after creating it.
+
+Two things here are untested. Whether `UpdateAgentRuntime` replaces or merges optional fields you leave out is untested, so the update below re-sends every field the create call set: losing the environment variables would stop the agent at startup. And the rejection itself was not exercised, because the runtime this example was tested on already had the flag set. The troubleshooting page's sample passes only the runtime ID and `metadataConfiguration`; the AWS CLI and boto3 reject that call, because `agentRuntimeArtifact` and `roleArn` are required.
 
 ```bash
 aws bedrock-agentcore-control update-agent-runtime \
@@ -78,7 +81,9 @@ aws bedrock-agentcore-control get-agent-runtime --region <REGION> --agent-runtim
   --query '{status: status, requireMMDSV2: metadataConfiguration.requireMMDSV2, env: keys(environmentVariables)}'
 ```
 
-Wait until the status is `READY`. The default credential chain reads the execution role from the metadata service.
+Wait until the status is `READY`. The default credential chain reads the execution role from the metadata service, and works under MMDSv2.
+
+If the environment variables are missing, the agent can't start: invocations fail with `RuntimeClientError` ("An error occurred when starting the runtime"), and the runtime's CloudWatch logs show `value not provided for required configurable variable`.
 
 ## Configuration through environment variables
 
@@ -102,7 +107,7 @@ aws bedrock-agentcore invoke-agent-runtime \
 cat response.json
 ```
 
-Add `--runtime-user-id <USER_ID>` to call the agent on behalf of a user; the agent then sees `ctx.userId` and keeps a separate history for that user. The caller then needs both `bedrock-agentcore:InvokeAgentRuntime` and `bedrock-agentcore:InvokeAgentRuntimeForUser` ([API reference](https://docs.aws.amazon.com/bedrock-agentcore/latest/APIReference/API_InvokeAgentRuntime.html)).
+Add `--runtime-user-id <USER_ID>` to call the agent on behalf of a user. AgentCore doesn't forward the user ID to the container, so `ctx.userId` stays `()`; the call arrives with a workload access token in `ctx.workloadAccessToken` instead. History is kept per session. The caller then needs both `bedrock-agentcore:InvokeAgentRuntime` and `bedrock-agentcore:InvokeAgentRuntimeForUser` ([API reference](https://docs.aws.amazon.com/bedrock-agentcore/latest/APIReference/API_InvokeAgentRuntime.html)).
 
 With boto3:
 

@@ -87,7 +87,7 @@
               {
                 "id": "$service.invoke.ctx",
                 "name": "ctx",
-                "doc": "The AgentCore context of the invocation: the session, request and user IDs, the workload access token, the OAuth2 callback URL, the inbound Authorization header, the allowlisted custom headers and the request headers.",
+                "doc": "The AgentCore context of the invocation: the session ID, a request ID, the workload access token, the OAuth2 callback URL, the inbound Authorization header, the allowlisted custom headers and the request headers.",
                 "type": {
                   "name": "Context",
                   "packageInfo": {

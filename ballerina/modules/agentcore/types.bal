@@ -49,8 +49,8 @@ public enum PingStatus {
 # The AgentCore context of an invocation. Declare a parameter of this type to receive it.
 #
 # + sessionId - The runtime session ID, if the caller sent one
-# + requestId - The request ID sent by AgentCore, or a generated UUID
-# + userId - The user ID passed to `InvokeAgentRuntimeForUser`
+# + requestId - A UUID generated per request; AgentCore Runtime doesn't forward its request ID header
+# + userId - Always `()`: AgentCore Runtime doesn't forward the runtime user ID header
 # + workloadAccessToken - The workload access token for AgentCore Identity
 # + oauth2CallbackUrl - The OAuth2 callback URL for AgentCore Identity
 # + authorization - The inbound `Authorization` header (with a custom JWT authorizer)

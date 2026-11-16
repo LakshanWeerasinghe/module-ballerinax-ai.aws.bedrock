@@ -106,7 +106,7 @@
               "target": "$service.invoke.ctx",
               "metadata": {
                 "label": "AgentCore Context",
-                "description": "The session, request and user IDs and other AgentCore values of the invocation."
+                "description": "The session ID, workload access token and other AgentCore values of the invocation."
               },
               "state": {
                 "editable": false,

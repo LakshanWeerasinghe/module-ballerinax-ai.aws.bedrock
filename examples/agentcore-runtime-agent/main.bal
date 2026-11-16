@@ -91,9 +91,9 @@ service on agentCoreListener {
     resource function get ping() returns agentcore:PingStatus => agentcore:HEALTHY;
 
     resource function post invocations(@http:Payload Prompt payload, agentcore:Context ctx) returns json|error {
-        // One history per user and session. A call without a session ID gets the request ID, so sessionless calls
-        // never share history. The JSON array keeps different pairs apart whatever characters the IDs contain.
-        string memoryKey = [ctx.userId, ctx.sessionId ?: ctx.requestId].toJsonString();
+        // One history per session. A call without a session ID gets the request ID, so sessionless calls never share
+        // history.
+        string memoryKey = ctx.sessionId ?: ctx.requestId;
         string|error reply = conversationTurns(memoryKey).run(payload.prompt, memoryKey);
         if ctx.sessionId is () {
             // A sessionless call is never continued, so its history is dropped.
