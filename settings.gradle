@@ -47,11 +47,13 @@ include ':checkstyle'
 include ':ai.aws.bedrock-native'
 include ':ai.aws.bedrock-ballerina'
 include ':ai.aws.bedrock-compiler-plugin'
+include ':ai.aws.bedrock-compiler-plugin-tests'
 
 project(':checkstyle').projectDir = file("build-config${File.separator}checkstyle")
 project(':ai.aws.bedrock-native').projectDir = file("native")
 project(':ai.aws.bedrock-ballerina').projectDir = file("ballerina")
 project(':ai.aws.bedrock-compiler-plugin').projectDir = file('compiler-plugin')
+project(':ai.aws.bedrock-compiler-plugin-tests').projectDir = file('compiler-plugin-tests')
 
 develocity {
     buildScan {
