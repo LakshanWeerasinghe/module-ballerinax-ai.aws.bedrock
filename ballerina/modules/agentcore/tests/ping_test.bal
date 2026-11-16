@@ -15,7 +15,9 @@
 // under the License.
 
 import ballerina/http;
+import ballerina/lang.runtime;
 import ballerina/test;
+import ballerina/time;
 
 isolated PingStatus pingValue = HEALTHY;
 isolated boolean pingFails = false;
@@ -90,12 +92,48 @@ function testPingUsesServiceValue() returns error? {
 }
 
 @test:Config {groups: ["ping"], dependsOn: [testPingUsesServiceValue]}
-function testPingErrorReportsHealthy() returns error? {
+function testTimeOfLastUpdateChangesOnlyOnStatusChange() returns error? {
+    setPing(HEALTHY);
+    int first = check (check ping())["time_of_last_update"].ensureType();
+    int now = time:utcNow()[0];
+    test:assertTrue(first > 0 && first <= now, first.toString());
+    runtime:sleep(1.1);
+    test:assertEquals((check ping())["time_of_last_update"], first);
+
+    setPing(HEALTHY_BUSY);
+    int busySince = check (check ping())["time_of_last_update"].ensureType();
+    test:assertTrue(busySince > first, string `${busySince} <= ${first}`);
+    runtime:sleep(1.1);
+    test:assertEquals((check ping())["time_of_last_update"], busySince);
+}
+
+@test:Config {groups: ["ping"], dependsOn: [testTimeOfLastUpdateChangesOnlyOnStatusChange]}
+function testPingErrorReportsHealthyWithoutTimestamp() returns error? {
+    setPing(HEALTHY_BUSY);
+    int busySince = check (check ping())["time_of_last_update"].ensureType();
     setPing(HEALTHY_BUSY, fails = true);
     test:assertEquals(check ping(), {status: "Healthy"});
     setPing(HEALTHY_BUSY, panics = true);
     test:assertEquals(check ping(), {status: "Healthy"});
+    // The fallback left the tracker alone: the status is still HealthyBusy since the same time.
+    setPing(HEALTHY_BUSY);
+    test:assertEquals(check ping(), {status: "HealthyBusy", time_of_last_update: busySince});
     setPing(HEALTHY);
+}
+
+@test:Config
+function testPingTracker() {
+    PingTracker tracker = new;
+    int first = tracker.timeOfLastUpdate(HEALTHY);
+    test:assertTrue(first > 0);
+    test:assertEquals(tracker.timeOfLastUpdate(HEALTHY), first);
+}
+
+@test:Config
+function testPingResponseShape() returns error? {
+    test:assertEquals(check pingResponse(HEALTHY).getJsonPayload(), {status: "Healthy"});
+    test:assertEquals(check pingResponse(HEALTHY_BUSY, 1700000000).getJsonPayload(),
+        {status: "HealthyBusy", time_of_last_update: 1700000000});
 }
 
 @test:Config
@@ -106,6 +144,8 @@ function testPingWithoutResource() returns error? {
         resource function post invocations() returns json => "ok";
     });
     check agentCoreListener.'start();
-    test:assertEquals((check ping(NO_PING_PORT))["status"], "Healthy");
+    map<json> body = check ping(NO_PING_PORT);
+    test:assertEquals(body["status"], "Healthy");
+    test:assertTrue(body["time_of_last_update"] is int);
     check agentCoreListener.immediateStop();
 }

@@ -30,18 +30,23 @@ type InvocationResponse http:Response|http:StatusCodeResponse;
 isolated service class DispatcherService {
     *http:Service;
 
+    private final PingTracker pingTracker = new;
+
     # `GET /ping`, served by the user's `get ping` resource.
     #
     # + return - The ping response
     isolated resource function get ping() returns http:Response {
         ResourceSignature|error? signature = getResourceSignature(self, http:HTTP_GET, [PING_PATH]);
         if signature is () {
-            return pingResponse(HEALTHY);
+            return pingResponse(HEALTHY, self.pingTracker.timeOfLastUpdate(HEALTHY));
         }
         any|error result = signature is error ? signature : invokeResource(self, http:HTTP_GET, [PING_PATH], (), ());
         if result is PingStatus {
-            return pingResponse(result);
+            return pingResponse(result, self.pingTracker.timeOfLastUpdate(result));
         }
+        // http-protocol-contract: a timestamp that advances on every ping keeps the session alive until MaxLifetime,
+        // and without one "the platform tracks status changes on its own". So the fallback sends none and leaves the
+        // tracker alone; `py/runtime/app.py:624` sends the current time here instead.
         error cause = result is error ? result : error("the 'get ping' resource returned a value that is not an "
             + "agentcore:PingStatus");
         log:printWarn("The ping resource failed; reporting Healthy", cause);
@@ -85,9 +90,35 @@ isolated service class DispatcherService {
     }
 }
 
-isolated function pingResponse(PingStatus status) returns http:Response {
+# Remembers when the ping status last changed. The http-protocol-contract asks for `time_of_last_update` to be set
+# "only on an actual status change".
+isolated class PingTracker {
+    private PingStatus? lastStatus = ();
+    private int lastUpdate = 0;
+
+    # Records a status and returns when the status last changed.
+    #
+    # + status - The current status
+    # + return - The Unix time in seconds of the last status change
+    isolated function timeOfLastUpdate(PingStatus status) returns int {
+        lock {
+            if self.lastStatus != status {
+                self.lastStatus = status;
+                self.lastUpdate = time:utcNow()[0];
+            }
+            return self.lastUpdate;
+        }
+    }
+}
+
+# Builds the `GET /ping` body of the http-protocol-contract: `{"status": ..., "time_of_last_update": ...}`.
+#
+# + status - The status
+# + timeOfLastUpdate - The Unix time in seconds of the last status change, or `()` to leave it out
+# + return - The response
+isolated function pingResponse(PingStatus status, int? timeOfLastUpdate = ()) returns http:Response {
     http:Response response = new;
-    response.setJsonPayload({status});
+    response.setJsonPayload(timeOfLastUpdate is int ? {status, time_of_last_update: timeOfLastUpdate} : {status});
     return response;
 }
 
