@@ -29,7 +29,7 @@ service on agentCoreListener {
 The service must declare both resources, at the root base path. The compiler rejects any other resource or remote function.
 
 - `get ping` takes no parameters and returns `agentcore:HEALTHY`, or `agentcore:HEALTHY_BUSY` while the agent runs background work. AgentCore keeps a `HealthyBusy` session alive. The listener adds `time_of_last_update` and changes it only when the status changes.
-- `post invocations` can declare an `@http:Payload` parameter of any `anydata` type and an `agentcore:Context` parameter, in any order.
+- `post invocations` can declare an `@http:Payload` parameter of an `anydata` type a JSON body can hold, and an `agentcore:Context` parameter, in any order. The compiler rejects `xml`, `table` and `string:RegExp`, alone or in a union.
 
 ## Payload
 

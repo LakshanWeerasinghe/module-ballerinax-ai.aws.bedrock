@@ -23,6 +23,15 @@ plugins {
 
 description = 'Ballerina - AWS Bedrock AI Provider Java Utils'
 
+// Sources compiled into both this library and the compiler plugin, so the two apply the same rules.
+sourceSets {
+    main {
+        java {
+            srcDir 'src/shared/java'
+        }
+    }
+}
+
 dependencies {
     implementation group: 'org.ballerinalang', name: 'ballerina-lang', version: "${ballerinaLangVersion}"
     implementation group: 'org.ballerinalang', name: 'ballerina-runtime', version: "${ballerinaLangVersion}"

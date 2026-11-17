@@ -66,6 +66,7 @@ public class AgentCoreServiceValidationTest {
     private static final String INVALID_RETURN_TYPE = "AI_AWS_BEDROCK_AGENTCORE_111";
     private static final String STREAM_RETURN_TYPE = "AI_AWS_BEDROCK_AGENTCORE_112";
     private static final String INVALID_BASE_PATH = "AI_AWS_BEDROCK_AGENTCORE_113";
+    private static final String UNBINDABLE_PAYLOAD_TYPE = "AI_AWS_BEDROCK_AGENTCORE_114";
 
     @Test
     public void testValidService() {
@@ -209,6 +210,15 @@ public class AgentCoreServiceValidationTest {
         assertDiagnostics("20_http_listener_rejected", 1);
     }
 
+    @Test
+    public void testUnbindablePayloadTypes() {
+        assertDiagnostics("21_unbindable_payload_types",
+                expect(UNBINDABLE_PAYLOAD_TYPE, 33, 54, unbindablePayloadType("payload", "xml")),
+                expect(UNBINDABLE_PAYLOAD_TYPE, 39, 54, unbindablePayloadType("payload", "table")),
+                expect(UNBINDABLE_PAYLOAD_TYPE, 45, 54, unbindablePayloadType("payload", "string:RegExp")),
+                expect(UNBINDABLE_PAYLOAD_TYPE, 51, 54, unbindablePayloadType("payload", "xml")));
+    }
+
     private static void assertDiagnostics(String packageName, ExpectedDiagnostic... expected) {
         assertDiagnostics(packageName, 0, expected);
     }
@@ -309,6 +319,11 @@ public class AgentCoreServiceValidationTest {
 
     private static String duplicateContextParameter() {
         return "the resource 'post invocations' declares more than one `agentcore:Context` parameter.";
+    }
+
+    private static String unbindablePayloadType(String parameter, String type) {
+        return "the `@http:Payload` parameter '" + parameter + "' of the resource 'post invocations' accepts '" + type
+                + "', which a JSON request body can't hold; use a JSON-compatible type, or `byte[]` for the raw bytes.";
     }
 
     private static String invalidPayloadType(String parameter, String type) {

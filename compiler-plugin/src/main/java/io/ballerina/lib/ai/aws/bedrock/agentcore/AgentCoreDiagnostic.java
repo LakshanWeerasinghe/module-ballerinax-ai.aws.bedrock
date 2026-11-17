@@ -70,7 +70,11 @@ public enum AgentCoreDiagnostic {
                     + "complete response instead.", ERROR),
     INVALID_BASE_PATH("AI_AWS_BEDROCK_AGENTCORE_113",
             "an `agentcore:InvocationService` must be attached at the root base path, because "
-                    + "AgentCore calls `/ping` and `/invocations` at the root; remove the base path ''{0}''.", ERROR);
+                    + "AgentCore calls `/ping` and `/invocations` at the root; remove the base path ''{0}''.", ERROR),
+    UNBINDABLE_PAYLOAD_TYPE("AI_AWS_BEDROCK_AGENTCORE_114",
+            "the `@http:Payload` parameter ''{0}'' of the resource ''post invocations'' accepts ''{1}'', which a "
+                    + "JSON request body can''t hold; use a JSON-compatible type, or `byte[]` for the raw bytes.",
+            ERROR);
 
     private final String code;
     private final String message;

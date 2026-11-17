@@ -23,6 +23,15 @@ plugins {
 
 description = 'Ballerina - AWS Bedrock AI Provider Compiler Plugin'
 
+// The rules shared with the native library, compiled into this jar as well.
+sourceSets {
+    main {
+        java {
+            srcDir "${rootDir}/native/src/shared/java"
+        }
+    }
+}
+
 configurations {
     externalJars
 }

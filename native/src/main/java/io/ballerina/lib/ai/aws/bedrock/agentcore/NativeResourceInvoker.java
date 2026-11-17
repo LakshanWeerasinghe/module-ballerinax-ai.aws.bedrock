@@ -30,6 +30,7 @@ import io.ballerina.runtime.api.types.RecordType;
 import io.ballerina.runtime.api.types.ResourceMethodType;
 import io.ballerina.runtime.api.types.ServiceType;
 import io.ballerina.runtime.api.types.Type;
+import io.ballerina.runtime.api.types.UnionType;
 import io.ballerina.runtime.api.utils.StringUtils;
 import io.ballerina.runtime.api.utils.TypeUtils;
 import io.ballerina.runtime.api.values.BArray;
@@ -44,6 +45,7 @@ import io.ballerina.runtime.observability.ObserverContext;
 import java.util.HashMap;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 
@@ -326,6 +328,11 @@ public final class NativeResourceInvoker {
                         throw unsupported(resourceName, "the type of its '@http:Payload' parameter '" + parameter.name
                                 + "' is not a subtype of 'anydata'");
                     }
+                    Optional<UnbindablePayloadType> unbindable = unbindable(parameter.type);
+                    if (unbindable.isPresent()) {
+                        throw unsupported(resourceName, "its '@http:Payload' parameter '" + parameter.name
+                                + "' accepts '" + unbindable.get().typeName() + "', which a JSON body can't hold");
+                    }
                     params.payloadIndex = i;
                     params.payloadType = parameter.type;
                 } else if (isContext(parameter.type, agentCoreModule)) {
@@ -350,6 +357,22 @@ public final class NativeResourceInvoker {
                 args[contextIndex] = context;
             }
             return args;
+        }
+
+        // The declared type and its direct union members, as the compiler plugin checks them.
+        private static Optional<UnbindablePayloadType> unbindable(Type type) {
+            Type implied = TypeUtils.getImpliedType(type);
+            if (implied instanceof UnionType union) {
+                for (Type member : union.getMemberTypes()) {
+                    Optional<UnbindablePayloadType> found =
+                            UnbindablePayloadType.ofRuntimeTag(TypeUtils.getImpliedType(member).getTag());
+                    if (found.isPresent()) {
+                        return found;
+                    }
+                }
+                return Optional.empty();
+            }
+            return UnbindablePayloadType.ofRuntimeTag(implied.getTag());
         }
 
         private static boolean hasPayloadAnnotation(ResourceMethodType resource, String paramName) {

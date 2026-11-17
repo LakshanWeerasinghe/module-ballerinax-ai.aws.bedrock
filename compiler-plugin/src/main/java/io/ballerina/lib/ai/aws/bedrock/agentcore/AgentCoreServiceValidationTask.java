@@ -20,6 +20,7 @@ package io.ballerina.lib.ai.aws.bedrock.agentcore;
 
 import io.ballerina.compiler.api.SemanticModel;
 import io.ballerina.compiler.api.symbols.AnnotationSymbol;
+import io.ballerina.compiler.api.symbols.IntersectionTypeSymbol;
 import io.ballerina.compiler.api.symbols.ModuleSymbol;
 import io.ballerina.compiler.api.symbols.ParameterSymbol;
 import io.ballerina.compiler.api.symbols.ResourceMethodSymbol;
@@ -69,6 +70,7 @@ import static io.ballerina.lib.ai.aws.bedrock.agentcore.AgentCoreDiagnostic.MISS
 import static io.ballerina.lib.ai.aws.bedrock.agentcore.AgentCoreDiagnostic.PING_PARAMETER_NOT_ALLOWED;
 import static io.ballerina.lib.ai.aws.bedrock.agentcore.AgentCoreDiagnostic.REMOTE_FUNCTION_NOT_ALLOWED;
 import static io.ballerina.lib.ai.aws.bedrock.agentcore.AgentCoreDiagnostic.STREAM_RETURN_TYPE;
+import static io.ballerina.lib.ai.aws.bedrock.agentcore.AgentCoreDiagnostic.UNBINDABLE_PAYLOAD_TYPE;
 import static io.ballerina.lib.ai.aws.bedrock.agentcore.AgentCoreDiagnostic.UNSUPPORTED_PARAMETER;
 import static io.ballerina.lib.ai.aws.bedrock.agentcore.AgentCoreDiagnostic.UNSUPPORTED_RESOURCE;
 
@@ -79,7 +81,8 @@ import static io.ballerina.lib.ai.aws.bedrock.agentcore.AgentCoreDiagnostic.UNSU
  * <li>the service declares {@code get ping} and {@code post invocations}, and no other resource or remote
  * function;</li>
  * <li>{@code get ping} declares no parameters and returns a subtype of {@code agentcore:PingStatus|error};</li>
- * <li>{@code post invocations} declares at most one {@code @http:Payload} parameter (an {@code anydata} subtype) and
+ * <li>{@code post invocations} declares at most one {@code @http:Payload} parameter (an {@code anydata} subtype that
+ * is not, and has no direct union member that is, one of the {@link UnbindablePayloadType}s) and
  * at most one {@code agentcore:Context} parameter, in any order, and returns a subtype of
  * {@code anydata|http:Response|http:StatusCodeResponse|error}, never a stream;</li>
  * <li>a service declaration is attached at the root base path.</li>
@@ -346,11 +349,8 @@ public class AgentCoreServiceValidationTask implements AnalysisTask<SyntaxNodeAn
                 if (hasPayloadAnnotation(parameterSymbol)) {
                     if (hasPayload) {
                         report(DUPLICATE_PAYLOAD_PARAMETER, parameter.location());
-                    } else if (checkTypes && !type.subtypeOf(anydataType)) {
-                        Node typeNode = parameterTypeNode(parameter);
-                        Location location = typeNode != null ? typeNode.location() : parameter.location();
-                        String typeText = typeNode != null ? typeNode.toSourceCode().trim() : type.signature();
-                        report(INVALID_PAYLOAD_TYPE, location, name, typeText);
+                    } else if (checkTypes) {
+                        validatePayloadType(parameter, name, type);
                     }
                     hasPayload = true;
                 } else if (isContext(type)) {
@@ -363,6 +363,18 @@ public class AgentCoreServiceValidationTask implements AnalysisTask<SyntaxNodeAn
                 }
             }
             validateInvocationsReturnType(resource);
+        }
+
+        private void validatePayloadType(ParameterNode parameter, String name, TypeSymbol type) {
+            Node typeNode = parameterTypeNode(parameter);
+            Location location = typeNode != null ? typeNode.location() : parameter.location();
+            if (!type.subtypeOf(anydataType)) {
+                String typeText = typeNode != null ? typeNode.toSourceCode().trim() : type.signature();
+                report(INVALID_PAYLOAD_TYPE, location, name, typeText);
+                return;
+            }
+            unbindable(type).ifPresent(unbindable -> report(UNBINDABLE_PAYLOAD_TYPE, location, name,
+                    unbindable.typeName()));
         }
 
         private void validateInvocationsReturnType(FunctionDefinitionNode resource) {
@@ -500,6 +512,30 @@ public class AgentCoreServiceValidationTask implements AnalysisTask<SyntaxNodeAn
             current = reference.typeDescriptor();
         }
         return current;
+    }
+
+    // The declared type and its direct union members, as the runtime checks them. `anydata` and `any` are not
+    // expanded, so an open record stays valid.
+    private static Optional<UnbindablePayloadType> unbindable(TypeSymbol type) {
+        TypeSymbol effective = effective(type);
+        if (effective instanceof UnionTypeSymbol union) {
+            for (TypeSymbol member : union.memberTypeDescriptors()) {
+                Optional<UnbindablePayloadType> found =
+                        UnbindablePayloadType.ofCompilerKind(effective(member).typeKind().name());
+                if (found.isPresent()) {
+                    return found;
+                }
+            }
+            return Optional.empty();
+        }
+        return UnbindablePayloadType.ofCompilerKind(effective.typeKind().name());
+    }
+
+    // The type behind aliases and intersections such as `readonly & xml`, as the runtime's implied type.
+    private static TypeSymbol effective(TypeSymbol type) {
+        TypeSymbol resolved = resolve(type);
+        return resolved instanceof IntersectionTypeSymbol intersection
+                ? resolve(intersection.effectiveTypeDescriptor()) : resolved;
     }
 
     private static void collectMembers(TypeSymbol type, List<TypeSymbol> members) {

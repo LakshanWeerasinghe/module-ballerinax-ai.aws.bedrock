@@ -27,6 +27,19 @@ const NO_INVOCATIONS_PORT = 19703;
 const BAD_INVOCATIONS_PARAM_PORT = 19704;
 const STREAM_CLOSE_FAILS_PORT = 19705;
 const DETACH_IN_FLIGHT_PORT = 19707;
+const XML_PAYLOAD_PORT = 19708;
+const TABLE_PAYLOAD_PORT = 19709;
+const REGEXP_PAYLOAD_PORT = 19710;
+const MIXED_UNION_PAYLOAD_PORT = 19711;
+const OPEN_RECORD_PAYLOAD_PORT = 19712;
+
+type PayloadRow record {|
+    string id;
+|};
+
+type OpenOrder record {
+    string id;
+};
 
 isolated class FailingCloseStream {
     public isolated function next() returns record {|string value;|}|error? => {value: "chunk"};
@@ -144,4 +157,61 @@ function testContextDefaults() {
     test:assertEquals(ctx.sessionId, ());
     test:assertEquals(ctx.customHeaders, {});
     test:assertEquals(ctx.requestHeaders, {});
+}
+
+function assertUnbindablePayload(int port, InvocationService agentCoreService) returns error? {
+    Listener agentCoreListener = check startOn(port, agentCoreService);
+    http:Client cl = check clientFor(port);
+    check assertRawJson(check postInvocation(cl, {id: "o1"}), 500, "{\"error\":\"Internal server error\"}");
+    check agentCoreListener.immediateStop();
+}
+
+@test:Config
+function testXmlPayloadRejected() returns error? {
+    check assertUnbindablePayload(XML_PAYLOAD_PORT, service object {
+        resource function get ping() returns PingStatus => HEALTHY;
+
+        resource function post invocations(@http:Payload xml payload) returns json => "called";
+    });
+}
+
+@test:Config
+function testTablePayloadRejected() returns error? {
+    check assertUnbindablePayload(TABLE_PAYLOAD_PORT, service object {
+        resource function get ping() returns PingStatus => HEALTHY;
+
+        resource function post invocations(@http:Payload table<PayloadRow> payload) returns json => "called";
+    });
+}
+
+@test:Config
+function testRegExpPayloadRejected() returns error? {
+    check assertUnbindablePayload(REGEXP_PAYLOAD_PORT, service object {
+        resource function get ping() returns PingStatus => HEALTHY;
+
+        resource function post invocations(@http:Payload string:RegExp payload) returns json => "called";
+    });
+}
+
+@test:Config
+function testUnionWithUnbindableMemberRejected() returns error? {
+    check assertUnbindablePayload(MIXED_UNION_PAYLOAD_PORT, service object {
+        resource function get ping() returns PingStatus => HEALTHY;
+
+        resource function post invocations(@http:Payload json|xml payload) returns json => "called";
+    });
+}
+
+@test:Config
+function testOpenRecordPayloadAccepted() returns error? {
+    InvocationService agentCoreService = service object {
+        resource function get ping() returns PingStatus => HEALTHY;
+
+        resource function post invocations(@http:Payload OpenOrder payload) returns anydata => payload;
+    };
+    Listener agentCoreListener = check startOn(OPEN_RECORD_PAYLOAD_PORT, agentCoreService);
+    http:Client cl = check clientFor(OPEN_RECORD_PAYLOAD_PORT);
+    check assertRawJson(check postInvocation(cl, {id: "o1", note: "extra"}), 200,
+        "{\"id\":\"o1\", \"note\":\"extra\"}");
+    check agentCoreListener.immediateStop();
 }
