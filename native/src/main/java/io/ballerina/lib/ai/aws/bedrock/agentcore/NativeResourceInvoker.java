@@ -30,6 +30,7 @@ import io.ballerina.runtime.api.types.RecordType;
 import io.ballerina.runtime.api.types.ResourceMethodType;
 import io.ballerina.runtime.api.types.ServiceType;
 import io.ballerina.runtime.api.types.Type;
+import io.ballerina.runtime.api.types.TypeTags;
 import io.ballerina.runtime.api.types.UnionType;
 import io.ballerina.runtime.api.utils.StringUtils;
 import io.ballerina.runtime.api.utils.TypeUtils;
@@ -359,10 +360,11 @@ public final class NativeResourceInvoker {
             return args;
         }
 
-        // The declared type and its direct union members, as the compiler plugin checks them.
+        // The declared type and its direct union members, as the compiler plugin checks them. `anydata` and `json` are
+        // `UnionType`s at runtime as well, so only a union proper is expanded.
         private static Optional<UnbindablePayloadType> unbindable(Type type) {
             Type implied = TypeUtils.getImpliedType(type);
-            if (implied instanceof UnionType union) {
+            if (implied.getTag() == TypeTags.UNION_TAG && implied instanceof UnionType union) {
                 for (Type member : union.getMemberTypes()) {
                     Optional<UnbindablePayloadType> found =
                             UnbindablePayloadType.ofRuntimeTag(TypeUtils.getImpliedType(member).getTag());

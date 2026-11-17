@@ -68,7 +68,8 @@ isolated function bindPayloadBytes(byte[] body, typedesc<anydata> payloadType)
     if body.length() == 0 && nil.ensureType(payloadType) !is error {
         return ();
     }
-    if payloadType is typedesc<byte[]?> {
+    // `()` alone is a subtype of `byte[]?` too, but is read as JSON, so a `null` body binds to it.
+    if payloadType is typedesc<byte[]?> && payloadType !is typedesc<()> {
         // Built for the declared type, so `byte[] & readonly` gets an immutable copy and `byte[]` a mutable one.
         anydata|error bytes = body.cloneWithType(payloadType);
         return bytes is error ? payloadBindingError(PAYLOAD_TYPE_MISMATCH_MESSAGE, bytes) : bytes;

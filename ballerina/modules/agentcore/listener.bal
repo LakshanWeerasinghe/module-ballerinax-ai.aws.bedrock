@@ -76,7 +76,9 @@ public isolated class Listener {
             unlinkUserService(dispatcher);
             return error("The agentcore:InvocationService is already attached to this agentcore:Listener");
         }
-        error? result = self.httpListener.attach(dispatcher, name);
+        // Attached at `()`, since http joins the segments of a root name such as `["", "/"]` into a base path that
+        // isn't the root.
+        error? result = self.httpListener.attach(dispatcher, ());
         if result is error {
             _ = removeDispatcher(agentCoreService, self);
             unlinkUserService(dispatcher);
