@@ -15,6 +15,7 @@
 // under the License.
 
 import ballerina/http;
+import ballerina/lang.runtime;
 import ballerina/test;
 
 isolated function newPingService() returns InvocationService => service object {
@@ -214,7 +215,7 @@ function testListenerConfigurationDefaults() {
 
 @test:Config
 function testSharedListenerRejectsConfig() returns error? {
-    http:Listener httpListener = check new (19111);
+    http:Listener httpListener = check new (19130);
     Listener|error agentCoreListener = new (httpListener, timeout = 120);
     if agentCoreListener !is error {
         test:assertFail("a configuration with a shared http:Listener was accepted");
@@ -247,4 +248,113 @@ function testSharedListenerAtAgentCoreDefaults() returns error? {
     // A timeout of 0 disables it.
     http:Listener noTimeout = check new (19116, timeout = 0, requestLimits = {maxHeaderSize: 131072});
     test:assertEquals(belowAgentCoreDefaults(noTimeout.getConfig()), ());
+}
+
+@test:Config
+function testRootBasePathVariantsServe() returns error? {
+    Listener agentCoreListener = check new (19117);
+    InvocationService agentCoreService = newPingService();
+    check agentCoreListener.'start();
+    http:Client cl = check new ("http://localhost:19117");
+    (string|string[])[] names = ["/", "//", " / ", "", ["", "/"], ["/", "/"]];
+    foreach string|string[] name in names {
+        check agentCoreListener.attach(agentCoreService, name);
+        http:Response response = check cl->get("/ping");
+        test:assertEquals(response.statusCode, 200, name.toString());
+        response = check cl->post("/invocations", {});
+        test:assertEquals(response.statusCode, 200, name.toString());
+        check agentCoreListener.detach(agentCoreService);
+    }
+    check agentCoreListener.immediateStop();
+}
+
+@test:Config
+function testSecondServiceOnSameListenerFails() returns error? {
+    Listener agentCoreListener = check new (19118);
+    InvocationService first = newPingService();
+    InvocationService second = service object {
+        resource function get ping() returns PingStatus => HEALTHY_BUSY;
+
+        resource function post invocations() returns json => "second";
+    };
+    check agentCoreListener.attach(first);
+    error? result = agentCoreListener.attach(second);
+    test:assertTrue(result is error);
+    check agentCoreListener.'start();
+    http:Client cl = check new ("http://localhost:19118");
+    string body = check cl->post("/invocations", {});
+    test:assertEquals(body, "ok");
+    // The failed attach left no record behind, so the second service attaches once the first is gone.
+    check agentCoreListener.detach(second);
+    check agentCoreListener.detach(first);
+    check agentCoreListener.attach(second);
+    body = check cl->post("/invocations", {});
+    test:assertEquals(body, "second");
+    check agentCoreListener.immediateStop();
+}
+
+@test:Config
+function testTwoAgentCoreListenersOnOneHttpListener() returns error? {
+    http:Listener httpListener = check new (19119, timeout = 900, requestLimits = {maxHeaderSize: 98304});
+    Listener first = check new (httpListener);
+    Listener second = check new (httpListener);
+    InvocationService agentCoreService = newPingService();
+    check first.attach(agentCoreService);
+    // Both would serve the same root of the same http:Listener.
+    error? result = second.attach(agentCoreService);
+    test:assertTrue(result is error);
+    check httpListener.'start();
+    http:Client cl = check new ("http://localhost:19119");
+    http:Response response = check cl->get("/ping");
+    test:assertEquals(response.statusCode, 200);
+    check first.detach(agentCoreService);
+    check second.attach(agentCoreService);
+    response = check cl->get("/ping");
+    test:assertEquals(response.statusCode, 200);
+    check httpListener.immediateStop();
+}
+
+@test:Config
+function testDetachFromAnotherListenerDoesNothing() returns error? {
+    Listener attached = check new (19120);
+    Listener other = check new (19121);
+    InvocationService agentCoreService = newPingService();
+    check attached.attach(agentCoreService);
+    check attached.'start();
+    check other.detach(agentCoreService);
+    http:Client cl = check new ("http://localhost:19120");
+    http:Response response = check cl->get("/ping");
+    test:assertEquals(response.statusCode, 200);
+    check attached.immediateStop();
+}
+
+@test:Config
+function testGracefulStopFinishesInFlightRequest() returns error? {
+    Listener agentCoreListener = check new (19122, gracefulStopTimeout = 10);
+    check agentCoreListener.attach(service object {
+        resource function get ping() returns PingStatus => HEALTHY;
+
+        resource function post invocations() returns json {
+            runtime:sleep(1.5);
+            return "finished";
+        }
+    });
+    check agentCoreListener.'start();
+    http:Client cl = check new ("http://localhost:19122", timeout = 10);
+    future<http:Response|error> call = start postInvocation(cl, {});
+    runtime:sleep(0.5);
+    check agentCoreListener.gracefulStop();
+    http:Response finished = check wait call;
+    check assertRawJson(finished, 200, "\"finished\"");
+}
+
+@test:Config
+function testSharedListenerAcceptsConfigEqualToDefaults() returns error? {
+    http:Listener httpListener = check new (19123);
+    Listener _ = check new (httpListener, requestLimits = {});
+    Listener _ = check new (httpListener, requestLimits = {maxHeaderSize: 98304}, host = "0.0.0.0");
+    Listener|error rejected = new (httpListener, requestLimits = {maxEntityBodySize: 1024});
+    test:assertTrue(rejected is error);
+    rejected = new (httpListener, gracefulStopTimeout = 5);
+    test:assertTrue(rejected is error);
 }

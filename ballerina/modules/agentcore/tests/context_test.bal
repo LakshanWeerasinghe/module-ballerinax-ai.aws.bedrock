@@ -178,3 +178,42 @@ isolated function valueIgnoringCase(map<json> headers, string name) returns json
     }
     return ();
 }
+
+@test:Config
+function testEmptyHeaderValuesAreAbsent() returns error? {
+    map<json> ctx = check invokeWithHeaders({
+        [HEADER_SESSION_ID]: "",
+        [HEADER_REQUEST_ID]: "",
+        [HEADER_IDENTITY_WAT]: "",
+        [HEADER_WORKLOAD_ACCESS_TOKEN]: "legacy"
+    });
+    test:assertEquals(ctx["sessionId"], ());
+    string requestId = check ctx["requestId"].ensureType();
+    test:assertTrue(UUID_PATTERN.isFullMatch(requestId), requestId);
+    // An empty WAT header counts as absent, so the legacy header is used.
+    test:assertEquals(ctx["workloadAccessToken"], "legacy");
+}
+
+@test:Config
+function testRepeatedHeadersUseFirstValue() returns error? {
+    http:Client cl = check clientFor(CONTEXT_PORT);
+    http:Request request = new;
+    request.setJsonPayload({});
+    request.addHeader(HEADER_SESSION_ID, "session-first");
+    request.addHeader(HEADER_SESSION_ID, "session-second");
+    request.addHeader("X-Amzn-Bedrock-AgentCore-Runtime-Custom-Tenant", "tenant-first");
+    request.addHeader("X-Amzn-Bedrock-AgentCore-Runtime-Custom-Tenant", "tenant-second");
+    map<json> ctx = check cl->post("/invocations", request);
+    test:assertEquals(ctx["sessionId"], "session-first");
+    test:assertEquals(ctx["rawSession"], "session-first");
+    test:assertEquals(ctx["customHeaders"], {"x-amzn-bedrock-agentcore-runtime-custom-tenant": "tenant-first"});
+}
+
+@test:Config
+function testSessionIdKeptVerbatim() returns error? {
+    string longId = string:'join("", ...from int _ in 0 ..< 256 select "s");
+    foreach string sessionId in [longId, "a-b_c.d:e/f=g+h", "MiXeD-Case-Session-0123456789-abcdef"] {
+        map<json> ctx = check invokeWithHeaders({[HEADER_SESSION_ID]: sessionId});
+        test:assertEquals(ctx["sessionId"], sessionId);
+    }
+}

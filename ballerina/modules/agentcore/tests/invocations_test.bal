@@ -264,3 +264,205 @@ function testUnknownRoutes() returns error? {
     response = check cl->get("/other");
     test:assertEquals(response.statusCode, 404);
 }
+
+const READONLY_RECORD_PORT = 19211;
+const NILABLE_UNION_PORT = 19212;
+const NIL_TYPE_PORT = 19213;
+const INT_PAYLOAD_PORT = 19214;
+const ANYDATA_PAYLOAD_PORT = 19215;
+const FINITE_PAYLOAD_PORT = 19216;
+
+@test:Config
+function testEmptyBodyBindsNilForJson() returns error? {
+    check assertJsonResponse(check postRaw(JSON_PORT, ""), 200, {received: ()});
+    check assertJsonResponse(check postRaw(JSON_PORT, "null"), 200, {received: ()});
+}
+
+@test:Config
+function testWhitespaceBodyIsNotEmpty() returns error? {
+    // Only a zero-length body is empty; whitespace is invalid JSON, as it is for `json.loads`.
+    check assertJsonResponse(check postRaw(JSON_PORT, "  \n"), 400, {'error: PAYLOAD_INVALID_MESSAGE});
+    check assertJsonResponse(check postRaw(OPTIONAL_PORT, "  \n"), 400, {'error: PAYLOAD_INVALID_MESSAGE});
+}
+
+@test:Config
+function testNullBody() returns error? {
+    check assertJsonResponse(check postRaw(OPTIONAL_PORT, "null"), 200, "none");
+    check assertJsonResponse(check postRaw(RECORD_PORT, "null"), 400, {'error: PAYLOAD_INVALID_MESSAGE});
+}
+
+@test:Config
+function testTrailingContentRejected() returns error? {
+    check assertJsonResponse(check postRaw(JSON_PORT, "{\"a\":1} {\"b\":2}"), 400, {'error: PAYLOAD_INVALID_MESSAGE});
+    check assertJsonResponse(check postRaw(JSON_PORT, "{\"a\":1} trailing"), 400, {'error: PAYLOAD_INVALID_MESSAGE});
+    check assertJsonResponse(check postRaw(JSON_PORT, " {\"a\":1}\n"), 200, {received: {a: 1}});
+}
+
+@test:Config
+function testDuplicateKeysLastWins() returns error? {
+    // As `json.loads` does.
+    check assertJsonResponse(check postRaw(RECORD_PORT, "{\"id\":\"a\",\"id\":\"b\",\"quantity\":1}"), 200,
+        {id: "b", total: 2});
+}
+
+@test:Config
+function testContentTypeIgnored() returns error? {
+    foreach string contentType in ["text/plain", "application/xml", "application/octet-stream",
+            "application/json; charset=utf-8"] {
+        check assertJsonResponse(check postRaw(JSON_PORT, "{\"a\":1}", contentType), 200, {received: {a: 1}});
+    }
+    http:Client cl = check clientFor(JSON_PORT);
+    http:Request request = new;
+    request.setTextPayload("{\"a\":1}");
+    check request.removeHeader("Content-Type");
+    http:Response response = check cl->post("/invocations", request);
+    check assertJsonResponse(response, 200, {received: {a: 1}});
+}
+
+@test:Config
+function testUnicodePayloadRoundTrip() returns error? {
+    http:Response response = check postRaw(JSON_PORT,
+        "{\"text\":\"héllo 世界 😀\",\"escaped\":\"\\u00e9\\ud83d\\ude00\"}");
+    check assertJsonResponse(response, 200, {received: {text: "héllo 世界 😀", escaped: "é😀"}});
+}
+
+// Built by doubling, so a long string doesn't cost an object per character.
+isolated function repeated(string unit, int times) returns string {
+    string result = "";
+    string chunk = unit;
+    int remaining = times;
+    while remaining > 0 {
+        if remaining % 2 == 1 {
+            result += chunk;
+        }
+        chunk += chunk;
+        remaining /= 2;
+    }
+    return result;
+}
+
+@test:Config
+function testDeeplyNestedBodyRejected() returns error? {
+    string open = repeated("[", 100000);
+    string close = repeated("]", 100000);
+    check assertJsonResponse(check postRaw(RECORD_PORT, open + close), 400, {'error: PAYLOAD_INVALID_MESSAGE});
+    check assertJsonResponse(check postRaw(RECORD_PORT, "{\"id\":\"o1\",\"quantity\":1}"), 200, {id: "o1", total: 2});
+}
+
+@test:Config
+function testLargeBodies() returns error? {
+    byte[] bytes = [];
+    bytes.setLength(8 * 1024 * 1024);
+    check assertJsonResponse(check postRaw(BYTES_PORT, bytes, "application/octet-stream"), 200, bytes.length());
+    string text = repeated("a", 1024 * 1024);
+    http:Response response = check postRaw(STRING_PORT, string `"${text}"`);
+    test:assertEquals(response.statusCode, 200);
+    test:assertEquals(check response.getTextPayload(), string `"${text.toUpperAscii()}"`);
+}
+
+@test:Config
+function testChunkedRequestBody() returns error? {
+    http:Client cl = check new (string `http://localhost:${JSON_PORT}`,
+        http1Settings = {chunking: http:CHUNKING_ALWAYS});
+    http:Request request = new;
+    request.setTextPayload("{\"a\":1}", APPLICATION_JSON);
+    http:Response response = check cl->post("/invocations", request);
+    check assertJsonResponse(response, 200, {received: {a: 1}});
+}
+
+@test:Config
+function testReadonlyRecordPayload() returns error? {
+    InvocationService agentCoreService = service object {
+        resource function get ping() returns PingStatus => HEALTHY;
+
+        resource function post invocations(@http:Payload readonly & Order 'order) returns json =>
+            {id: 'order.id, isReadOnly: 'order is readonly};
+    };
+    Listener agentCoreListener = check startOn(READONLY_RECORD_PORT, agentCoreService);
+    check assertJsonResponse(check postRaw(READONLY_RECORD_PORT, "{\"id\":\"o1\",\"quantity\":1}"), 200,
+        {id: "o1", isReadOnly: true});
+    check assertJsonResponse(check postRaw(READONLY_RECORD_PORT, "{\"id\":\"o1\",\"quantity\":1,\"x\":0}"), 400,
+        {'error: PAYLOAD_INVALID_MESSAGE});
+    check agentCoreListener.immediateStop();
+}
+
+@test:Config
+function testNilableUnionPayload() returns error? {
+    InvocationService agentCoreService = service object {
+        resource function get ping() returns PingStatus => HEALTHY;
+
+        resource function post invocations(@http:Payload Order|string? payload) returns json {
+            if payload is () {
+                return "nil";
+            }
+            return payload is string ? "string" : "record";
+        }
+    };
+    Listener agentCoreListener = check startOn(NILABLE_UNION_PORT, agentCoreService);
+    check assertJsonResponse(check postRaw(NILABLE_UNION_PORT, "{\"id\":\"o1\",\"quantity\":1}"), 200, "record");
+    check assertJsonResponse(check postRaw(NILABLE_UNION_PORT, "\"text\""), 200, "string");
+    check assertJsonResponse(check postRaw(NILABLE_UNION_PORT, "null"), 200, "nil");
+    check assertJsonResponse(check postRaw(NILABLE_UNION_PORT, ""), 200, "nil");
+    check assertJsonResponse(check postRaw(NILABLE_UNION_PORT, "42"), 400, {'error: PAYLOAD_INVALID_MESSAGE});
+    check agentCoreListener.immediateStop();
+}
+
+@test:Config
+function testNilPayloadType() returns error? {
+    InvocationService agentCoreService = service object {
+        resource function get ping() returns PingStatus => HEALTHY;
+
+        resource function post invocations(@http:Payload () nothing) returns json => "nil";
+    };
+    Listener agentCoreListener = check startOn(NIL_TYPE_PORT, agentCoreService);
+    check assertJsonResponse(check postRaw(NIL_TYPE_PORT, ""), 200, "nil");
+    check assertJsonResponse(check postRaw(NIL_TYPE_PORT, "null"), 200, "nil");
+    http:Response response = check postRaw(NIL_TYPE_PORT, "1");
+    test:assertEquals(response.statusCode, 400);
+    check agentCoreListener.immediateStop();
+}
+
+@test:Config
+function testIntPayload() returns error? {
+    InvocationService agentCoreService = service object {
+        resource function get ping() returns PingStatus => HEALTHY;
+
+        resource function post invocations(@http:Payload int n) returns int => n + 1;
+    };
+    Listener agentCoreListener = check startOn(INT_PAYLOAD_PORT, agentCoreService);
+    check assertJsonResponse(check postRaw(INT_PAYLOAD_PORT, "41"), 200, 42);
+    check assertJsonResponse(check postRaw(INT_PAYLOAD_PORT, "-9223372036854775807"), 200, -9223372036854775806);
+    foreach string body in ["\"41\"", "1.5", "9223372036854775808", "true"] {
+        check assertJsonResponse(check postRaw(INT_PAYLOAD_PORT, body), 400, {'error: PAYLOAD_INVALID_MESSAGE});
+    }
+    check agentCoreListener.immediateStop();
+}
+
+@test:Config
+function testAnydataPayload() returns error? {
+    InvocationService agentCoreService = service object {
+        resource function get ping() returns PingStatus => HEALTHY;
+
+        resource function post invocations(@http:Payload anydata payload) returns anydata => payload;
+    };
+    Listener agentCoreListener = check startOn(ANYDATA_PAYLOAD_PORT, agentCoreService);
+    check assertJsonResponse(check postRaw(ANYDATA_PAYLOAD_PORT, "{\"a\":[1,\"x\",null,true,{\"b\":-2}]}"), 200,
+        {a: [1, "x", (), true, {b: -2}]});
+    check assertJsonResponse(check postRaw(ANYDATA_PAYLOAD_PORT, ""), 200, ());
+    check agentCoreListener.immediateStop();
+}
+
+@test:Config
+function testFiniteStringPayload() returns error? {
+    InvocationService agentCoreService = service object {
+        resource function get ping() returns PingStatus => HEALTHY;
+
+        resource function post invocations(@http:Payload "yes"|"no" answer) returns string => answer;
+    };
+    Listener agentCoreListener = check startOn(FINITE_PAYLOAD_PORT, agentCoreService);
+    check assertJsonResponse(check postRaw(FINITE_PAYLOAD_PORT, "\"yes\""), 200, "yes");
+    http:Response response = check postRaw(FINITE_PAYLOAD_PORT, "\"maybe\"");
+    test:assertEquals(response.statusCode, 400);
+    test:assertFalse((check response.getTextPayload()).includes("maybe"));
+    check agentCoreListener.immediateStop();
+}

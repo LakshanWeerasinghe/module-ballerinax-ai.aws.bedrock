@@ -299,3 +299,219 @@ function testListenerTimeoutBoundsAgentTime() returns error? {
     test:assertTrue(response is error || response.statusCode >= 500);
     check agentCoreListener.immediateStop();
 }
+
+const EDGE_RESPONSES_PORT = 19505;
+const NO_RETURN_TYPE_PORT = 19506;
+
+type OrderNotFoundError distinct httpscerr:NotFoundError;
+
+type ScoreRow record {|
+    int score;
+|};
+
+isolated function recurseForever(int depth) returns int => recurseForever(depth + 1) + 1;
+
+final Listener edgeResponsesListener = check new (EDGE_RESPONSES_PORT);
+
+@test:BeforeSuite
+function startEdgeResponsesListener() returns error? {
+    check edgeResponsesListener.attach(service object {
+        resource function get ping() returns PingStatus => HEALTHY;
+
+        resource function post invocations(@http:Payload ResultRequest request)
+                returns anydata|http:Response|http:StatusCodeResponse|error {
+            match request.kind {
+                "decimal" => {
+                    return 1.10d;
+                }
+                "negativeZero" => {
+                    return -0.0;
+                }
+                "nan" => {
+                    return float:NaN;
+                }
+                "infinity" => {
+                    return {value: float:Infinity};
+                }
+                "unicode" => {
+                    return {text: "héllo 世界 😀", quote: "say \"hi\"\n"};
+                }
+                "xml" => {
+                    return xml `<a>b</a>`;
+                }
+                "table" => {
+                    table<ScoreRow> scores = table [{score: 1}, {score: 2}];
+                    return scores;
+                }
+                "response500" => {
+                    http:Response response = new;
+                    response.statusCode = 500;
+                    response.setTextPayload("agent-chosen body");
+                    return response;
+                }
+                "internalServerErrorRecord" => {
+                    http:InternalServerError failure = {body: {detail: "agent-chosen detail"}};
+                    return failure;
+                }
+                "badRequestWithCause" => {
+                    return error httpscerr:BadRequestError("The prompt is missing",
+                        error("cause-marker-5e1a"));
+                }
+                "distinctNotFound" => {
+                    return error OrderNotFoundError("No such order");
+                }
+                "quotedMessage" => {
+                    return error httpscerr:ConflictError("say \"hi\"\n\tthen 世界");
+                }
+                "status429" => {
+                    return error httpscerr:DefaultStatusCodeError("Slow down", statusCode = 429);
+                }
+                "cyclicArray" => {
+                    anydata[] cyclic = [];
+                    cyclic.push(cyclic);
+                    return cyclic;
+                }
+                "stackOverflow" => {
+                    return recurseForever(0);
+                }
+                "deep" => {
+                    anydata deep = ();
+                    foreach int _ in 0 ..< 100000 {
+                        deep = [deep];
+                    }
+                    return deep;
+                }
+            }
+            return "unknown";
+        }
+    });
+    check edgeResponsesListener.'start();
+}
+
+@test:AfterSuite
+function stopEdgeResponsesListener() returns error? {
+    check edgeResponsesListener.immediateStop();
+}
+
+isolated function invokeEdgeKind(string kind) returns http:Response|error {
+    http:Client cl = check new (string `http://localhost:${EDGE_RESPONSES_PORT}`, timeout = 30);
+    return cl->post("/invocations", {kind});
+}
+
+@test:Config
+function testDecimalAndNegativeZeroResults() returns error? {
+    check assertRawJson(check invokeEdgeKind("decimal"), 200, "1.10");
+    check assertRawJson(check invokeEdgeKind("negativeZero"), 200, "-0.0");
+}
+
+// A float that JSON can't represent must not reach the caller as a `200` with an invalid JSON body.
+@test:Config {enable: false}
+function testNonFiniteFloatResultIsNotInvalidJson() returns error? {
+    foreach string kind in ["nan", "infinity"] {
+        http:Response response = check invokeEdgeKind(kind);
+        if response.statusCode == 200 {
+            json|error body = response.getJsonPayload();
+            test:assertTrue(body !is error, string `${kind}: ${check response.getTextPayload()}`);
+        }
+    }
+    // A body number out of float range binds to Infinity and is echoed back.
+    http:Response echoed = check postRaw(JSON_PORT, "1e400");
+    if echoed.statusCode == 200 {
+        json|error body = echoed.getJsonPayload();
+        test:assertTrue(body !is error, check echoed.getTextPayload());
+    }
+}
+
+@test:Config
+function testUnicodeResult() returns error? {
+    http:Response response = check invokeEdgeKind("unicode");
+    test:assertEquals(response.statusCode, 200);
+    test:assertEquals(check response.getJsonPayload(), {text: "héllo 世界 😀", quote: "say \"hi\"\n"});
+}
+
+@test:Config
+function testXmlAndTableResultsSentAsJson() returns error? {
+    check assertRawJson(check invokeEdgeKind("xml"), 200, "\"<a>b</a>\"");
+    check assertRawJson(check invokeEdgeKind("table"), 200, "[{\"score\":1}, {\"score\":2}]");
+}
+
+@test:Config
+function testServerErrorResponsesPassThrough() returns error? {
+    // A status the agent builds itself is its choice, so its body is not replaced by the generic message.
+    http:Response response = check invokeEdgeKind("response500");
+    test:assertEquals(response.statusCode, 500);
+    test:assertEquals(check response.getTextPayload(), "agent-chosen body");
+    response = check invokeEdgeKind("internalServerErrorRecord");
+    test:assertEquals(response.statusCode, 500);
+    test:assertEquals(check response.getJsonPayload(), {detail: "agent-chosen detail"});
+}
+
+@test:Config
+function testClientErrorKeepsMessageButNotCause() returns error? {
+    http:Response response = check invokeEdgeKind("badRequestWithCause");
+    check assertRawJson(response, 400, "{\"error\":\"The prompt is missing\"}");
+}
+
+@test:Config
+function testDistinctClientErrorSubtype() returns error? {
+    check assertRawJson(check invokeEdgeKind("distinctNotFound"), 404, "{\"error\":\"No such order\"}");
+}
+
+@test:Config
+function testClientErrorMessageIsEscaped() returns error? {
+    http:Response response = check invokeEdgeKind("quotedMessage");
+    test:assertEquals(response.statusCode, 409);
+    test:assertEquals(check response.getJsonPayload(), {'error: "say \"hi\"\n\tthen 世界"});
+}
+
+@test:Config
+function testDefaultStatusCodeClientError() returns error? {
+    check assertRawJson(check invokeEdgeKind("status429"), 429, "{\"error\":\"Slow down\"}");
+}
+
+@test:Config
+function testUnserializableResultsAre500() returns error? {
+    foreach string kind in ["cyclicArray", "deep"] {
+        check assertRawJson(check invokeEdgeKind(kind), 500, "{\"error\":\"Internal server error\"}");
+    }
+}
+
+@test:Config
+function testStackOverflowIs500() returns error? {
+    check assertRawJson(check invokeEdgeKind("stackOverflow"), 500, "{\"error\":\"Internal server error\"}");
+    check assertRawJson(check invokeEdgeKind("decimal"), 200, "1.10");
+}
+
+@test:Config
+function testErrorStatusBoundaries() returns error? {
+    Context ctx = {requestId: "r-1", headers: createHeaders(new http:Request())};
+    [int, int, string][] cases = [
+        [399, 500, INTERNAL_SERVER_ERROR_MESSAGE],
+        [400, 400, "e"],
+        [499, 499, "e"],
+        [500, 500, INTERNAL_SERVER_ERROR_MESSAGE],
+        [599, 599, INTERNAL_SERVER_ERROR_MESSAGE],
+        [600, 500, INTERNAL_SERVER_ERROR_MESSAGE],
+        [-1, 500, INTERNAL_SERVER_ERROR_MESSAGE]
+    ];
+    foreach [int, int, string] [given, expected, message] in cases {
+        http:Response response = errorResultResponse(
+            error httpscerr:DefaultStatusCodeError("e", statusCode = given), ctx);
+        test:assertEquals(response.statusCode, expected, given.toString());
+        test:assertEquals(check response.getJsonPayload(), {'error: message}, given.toString());
+    }
+}
+
+@test:Config
+function testResourceWithoutReturnType() returns error? {
+    InvocationService agentCoreService = service object {
+        resource function get ping() returns PingStatus => HEALTHY;
+
+        resource function post invocations() {
+        }
+    };
+    Listener agentCoreListener = check startOn(NO_RETURN_TYPE_PORT, agentCoreService);
+    http:Client cl = check clientFor(NO_RETURN_TYPE_PORT);
+    check assertRawJson(check postInvocation(cl, {}), 200, "null");
+    check agentCoreListener.immediateStop();
+}

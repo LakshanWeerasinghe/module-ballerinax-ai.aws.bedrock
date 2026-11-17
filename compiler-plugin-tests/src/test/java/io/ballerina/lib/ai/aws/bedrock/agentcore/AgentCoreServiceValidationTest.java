@@ -219,6 +219,34 @@ public class AgentCoreServiceValidationTest {
                 expect(UNBINDABLE_PAYLOAD_TYPE, 51, 54, unbindablePayloadType("payload", "xml")));
     }
 
+    @Test
+    public void testPayloadTypeEdgeCases() {
+        assertDiagnostics("22_payload_type_edge_cases",
+                expect(UNBINDABLE_PAYLOAD_TYPE, 37, 54, unbindablePayloadType("payload", "xml")),
+                expect(UNBINDABLE_PAYLOAD_TYPE, 43, 54, unbindablePayloadType("payload", "xml")),
+                expect(UNBINDABLE_PAYLOAD_TYPE, 49, 54, unbindablePayloadType("payload", "xml")),
+                expect(UNBINDABLE_PAYLOAD_TYPE, 55, 54, unbindablePayloadType("payload", "xml")),
+                expect(UNBINDABLE_PAYLOAD_TYPE, 61, 54, unbindablePayloadType("payload", "xml")),
+                expect(UNBINDABLE_PAYLOAD_TYPE, 67, 54, unbindablePayloadType("payload", "table")),
+                expect(UNBINDABLE_PAYLOAD_TYPE, 73, 54, unbindablePayloadType("payload", "string:RegExp")),
+                expect(UNBINDABLE_PAYLOAD_TYPE, 80, 54, unbindablePayloadType("payload", "xml")),
+                expect(UNSUPPORTED_PARAMETER, 105, 40, unsupportedParameter("ctx")));
+    }
+
+    @Test
+    public void testUnbindablePayloadInClassesAndObjects() {
+        assertDiagnostics("23_unbindable_in_classes_and_objects",
+                expect(UNBINDABLE_PAYLOAD_TYPE, 29, 54, unbindablePayloadType("payload", "xml")),
+                expect(UNBINDABLE_PAYLOAD_TYPE, 35, 54, unbindablePayloadType("payload", "table")),
+                expect(UNBINDABLE_PAYLOAD_TYPE, 43, 58, unbindablePayloadType("payload", "string:RegExp")),
+                expect(UNBINDABLE_PAYLOAD_TYPE, 52, 77, unbindablePayloadType("payload", "xml")));
+    }
+
+    @Test
+    public void testUnbindablePayloadWithCompilationErrors() {
+        assertDiagnostics("24_unbindable_with_compilation_errors", 1);
+    }
+
     private static void assertDiagnostics(String packageName, ExpectedDiagnostic... expected) {
         assertDiagnostics(packageName, 0, expected);
     }

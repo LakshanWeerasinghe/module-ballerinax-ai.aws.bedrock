@@ -215,3 +215,175 @@ function testOpenRecordPayloadAccepted() returns error? {
         "{\"id\":\"o1\", \"note\":\"extra\"}");
     check agentCoreListener.immediateStop();
 }
+
+const READONLY_XML_PAYLOAD_PORT = 19713;
+const OPTIONAL_XML_PAYLOAD_PORT = 19714;
+const ALIASED_XML_PAYLOAD_PORT = 19715;
+const ALIASED_UNION_PAYLOAD_PORT = 19716;
+const XML_ELEMENT_PAYLOAD_PORT = 19717;
+const OPTIONAL_REGEXP_PAYLOAD_PORT = 19718;
+const NESTED_ALIAS_PAYLOAD_PORT = 19719;
+const XML_ARRAY_PAYLOAD_PORT = 19720;
+const MAP_OF_XML_PAYLOAD_PORT = 19721;
+const PING_STRING_STATUS_PORT = 19722;
+const QUERY_PORT = 19723;
+const ALIASED_CONTEXT_PORT = 19724;
+const READONLY_CONTEXT_PORT = 19725;
+
+type XmlDocument xml;
+
+type JsonOrXml json|xml;
+
+type XmlOrText xml|string;
+
+type AgentContext Context;
+
+@test:Config
+function testReadonlyXmlPayloadRejected() returns error? {
+    check assertUnbindablePayload(READONLY_XML_PAYLOAD_PORT, service object {
+        resource function get ping() returns PingStatus => HEALTHY;
+
+        resource function post invocations(@http:Payload readonly & xml payload) returns json => "called";
+    });
+}
+
+@test:Config
+function testOptionalXmlPayloadRejected() returns error? {
+    check assertUnbindablePayload(OPTIONAL_XML_PAYLOAD_PORT, service object {
+        resource function get ping() returns PingStatus => HEALTHY;
+
+        resource function post invocations(@http:Payload xml? payload) returns json => "called";
+    });
+}
+
+@test:Config
+function testAliasedXmlPayloadRejected() returns error? {
+    check assertUnbindablePayload(ALIASED_XML_PAYLOAD_PORT, service object {
+        resource function get ping() returns PingStatus => HEALTHY;
+
+        resource function post invocations(@http:Payload XmlDocument payload) returns json => "called";
+    });
+}
+
+@test:Config
+function testAliasedUnionPayloadRejected() returns error? {
+    check assertUnbindablePayload(ALIASED_UNION_PAYLOAD_PORT, service object {
+        resource function get ping() returns PingStatus => HEALTHY;
+
+        resource function post invocations(@http:Payload JsonOrXml payload) returns json => "called";
+    });
+}
+
+@test:Config
+function testXmlElementPayloadRejected() returns error? {
+    check assertUnbindablePayload(XML_ELEMENT_PAYLOAD_PORT, service object {
+        resource function get ping() returns PingStatus => HEALTHY;
+
+        resource function post invocations(@http:Payload xml:Element payload) returns json => "called";
+    });
+}
+
+// At runtime the `string:RegExp` member of the union is a reference whose implied type is `anydata`, so the runtime
+// check misses it and binds a JSON object to it. The compiler plugin rejects the type.
+@test:Config {enable: false}
+function testOptionalRegExpPayloadRejected() returns error? {
+    check assertUnbindablePayload(OPTIONAL_REGEXP_PAYLOAD_PORT, service object {
+        resource function get ping() returns PingStatus => HEALTHY;
+
+        resource function post invocations(@http:Payload string:RegExp? payload) returns json => "called";
+    });
+}
+
+// A union member that is itself a union is flattened into the outer union, as the compiler plugin sees it too
+// (`22_payload_type_edge_cases`).
+@test:Config
+function testUnionMemberAliasRejected() returns error? {
+    check assertUnbindablePayload(NESTED_ALIAS_PAYLOAD_PORT, service object {
+        resource function get ping() returns PingStatus => HEALTHY;
+
+        resource function post invocations(@http:Payload XmlOrText|int payload) returns json => "called";
+    });
+}
+
+// Only the declared type and its direct union members are checked, so these reach the binder, which can't produce
+// xml from JSON and answers 400.
+@test:Config
+function testNestedXmlPayloadIsBadRequest() returns error? {
+    InvocationService arrayService = service object {
+        resource function get ping() returns PingStatus => HEALTHY;
+
+        resource function post invocations(@http:Payload xml[] payload) returns json => payload.length();
+    };
+    Listener arrayListener = check startOn(XML_ARRAY_PAYLOAD_PORT, arrayService);
+    InvocationService mapService = service object {
+        resource function get ping() returns PingStatus => HEALTHY;
+
+        resource function post invocations(@http:Payload map<xml> payload) returns json => payload.length();
+    };
+    Listener mapListener = check startOn(MAP_OF_XML_PAYLOAD_PORT, mapService);
+    check assertJsonResponse(check postRaw(XML_ARRAY_PAYLOAD_PORT, "[\"<a/>\"]"), 400,
+        {'error: PAYLOAD_INVALID_MESSAGE});
+    check assertJsonResponse(check postRaw(XML_ARRAY_PAYLOAD_PORT, "[]"), 200, 0);
+    check assertJsonResponse(check postRaw(MAP_OF_XML_PAYLOAD_PORT, "{\"a\":\"<a/>\"}"), 400,
+        {'error: PAYLOAD_INVALID_MESSAGE});
+    check assertJsonResponse(check postRaw(MAP_OF_XML_PAYLOAD_PORT, "{}"), 200, 0);
+    check arrayListener.immediateStop();
+    check mapListener.immediateStop();
+}
+
+@test:Config
+function testPingReturningStatusString() returns error? {
+    // A `string` that holds a status value is that status.
+    InvocationService agentCoreService = service object {
+        resource function get ping() returns string => "HealthyBusy";
+
+        resource function post invocations() returns json => "ok";
+    };
+    Listener agentCoreListener = check startOn(PING_STRING_STATUS_PORT, agentCoreService);
+    map<json> body = check ping(PING_STRING_STATUS_PORT);
+    test:assertEquals(body["status"], "HealthyBusy");
+    test:assertTrue(body["time_of_last_update"] is int);
+    check agentCoreListener.immediateStop();
+}
+
+@test:Config
+function testQueryStringsAndMethods() returns error? {
+    Listener agentCoreListener = check startOn(QUERY_PORT, newPingService());
+    http:Client cl = check clientFor(QUERY_PORT);
+    http:Response response = check cl->get("/ping?probe=1");
+    test:assertEquals(response.statusCode, 200);
+    response = check cl->post("/invocations?qualifier=DEFAULT", {});
+    check assertRawJson(response, 200, "\"ok\"");
+    response = check cl->post("/ping", {});
+    test:assertEquals(response.statusCode, 405);
+    response = check cl->put("/invocations", {});
+    test:assertEquals(response.statusCode, 405);
+    check agentCoreListener.immediateStop();
+}
+
+@test:Config
+function testAliasedContextParameter() returns error? {
+    InvocationService agentCoreService = service object {
+        resource function get ping() returns PingStatus => HEALTHY;
+
+        resource function post invocations(AgentContext ctx) returns json => ctx.sessionId;
+    };
+    Listener agentCoreListener = check startOn(ALIASED_CONTEXT_PORT, agentCoreService);
+    http:Client cl = check clientFor(ALIASED_CONTEXT_PORT);
+    check assertRawJson(check postInvocation(cl, {}, {[HEADER_SESSION_ID]: "s-alias"}), 200, "\"s-alias\"");
+    check agentCoreListener.immediateStop();
+}
+
+@test:Config
+function testReadonlyContextParameterRejected() returns error? {
+    // The compiler plugin rejects it too: only `agentcore:Context` itself, or an alias of it, is supplied.
+    InvocationService agentCoreService = service object {
+        resource function get ping() returns PingStatus => HEALTHY;
+
+        resource function post invocations(readonly & Context ctx) returns json => ctx.sessionId;
+    };
+    Listener agentCoreListener = check startOn(READONLY_CONTEXT_PORT, agentCoreService);
+    http:Client cl = check clientFor(READONLY_CONTEXT_PORT);
+    check assertRawJson(check postInvocation(cl, {}), 500, "{\"error\":\"Internal server error\"}");
+    check agentCoreListener.immediateStop();
+}

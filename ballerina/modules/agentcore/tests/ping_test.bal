@@ -166,3 +166,61 @@ function testPingWithParametersReportsHealthyWithoutTimestamp() returns error? {
     test:assertEquals(check ping(PING_PARAMS_PORT), {status: "Healthy"});
     check agentCoreListener.immediateStop();
 }
+
+const STATEFUL_PING_PORT = 19404;
+const CONCURRENT_PING_PORT = 19405;
+
+// A non-isolated service whose ping reports state that `post invocations` changes, both under the runtime's lock.
+service class BackgroundWorkService {
+    *InvocationService;
+    boolean busy = false;
+
+    resource function get ping() returns PingStatus => self.busy ? HEALTHY_BUSY : HEALTHY;
+
+    resource function post invocations(@http:Payload boolean busy) returns boolean {
+        self.busy = busy;
+        return self.busy;
+    }
+}
+
+@test:Config
+function testNonIsolatedPingReadsServiceState() returns error? {
+    Listener agentCoreListener = check startOn(STATEFUL_PING_PORT, new BackgroundWorkService());
+    http:Client cl = check clientFor(STATEFUL_PING_PORT);
+    test:assertEquals((check ping(STATEFUL_PING_PORT))["status"], "Healthy");
+    check assertRawJson(check postInvocation(cl, true), 200, "true");
+    test:assertEquals((check ping(STATEFUL_PING_PORT))["status"], "HealthyBusy");
+    check assertRawJson(check postInvocation(cl, false), 200, "false");
+    test:assertEquals((check ping(STATEFUL_PING_PORT))["status"], "Healthy");
+    check agentCoreListener.immediateStop();
+}
+
+isolated int pingCalls = 0;
+
+@test:Config
+function testConcurrentPingsWithChangingStatus() returns error? {
+    InvocationService agentCoreService = isolated service object {
+        isolated resource function get ping() returns PingStatus {
+            lock {
+                pingCalls += 1;
+                return pingCalls % 2 == 0 ? HEALTHY : HEALTHY_BUSY;
+            }
+        }
+
+        isolated resource function post invocations() returns json => "ok";
+    };
+    Listener agentCoreListener = check startOn(CONCURRENT_PING_PORT, agentCoreService);
+    future<map<json>|error>[] calls = [];
+    foreach int _ in 0 ..< 40 {
+        future<map<json>|error> call = start ping(CONCURRENT_PING_PORT);
+        calls.push(call);
+    }
+    int now = time:utcNow()[0];
+    foreach future<map<json>|error> call in calls {
+        map<json> body = check wait call;
+        test:assertTrue(body["status"] == "Healthy" || body["status"] == "HealthyBusy", body.toString());
+        int timeOfLastUpdate = check body["time_of_last_update"].ensureType();
+        test:assertTrue(timeOfLastUpdate > 0 && timeOfLastUpdate <= now + 1, body.toString());
+    }
+    check agentCoreListener.immediateStop();
+}
