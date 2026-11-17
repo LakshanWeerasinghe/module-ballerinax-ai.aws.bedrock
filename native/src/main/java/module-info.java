@@ -21,4 +21,5 @@ module io.ballerina.lib.ai.aws.bedrock {
     requires io.ballerina.runtime;
 
     exports io.ballerina.lib.ai.aws.bedrock;
+    exports io.ballerina.lib.ai.aws.bedrock.agentcore;
 }

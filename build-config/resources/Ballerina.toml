@@ -8,6 +8,11 @@ keywords = ["ai", "aws", "bedrock", "llm", "embeddings", "converse", "Area/AI & 
 repository = "https://github.com/ballerina-platform/module-ballerinax-ai.aws.bedrock"
 license = ["Apache-2.0"]
 icon = "icon.png"
+include = ["metadata/**"]
+
+[[package.modules]]
+name = "ai.aws.bedrock.agentcore"
+export = true
 
 [build-options]
 observabilityIncluded = true

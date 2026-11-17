@@ -1,0 +1,155 @@
+{
+  "version": "v1.0",
+  "metadata": {
+    "kind": "ai"
+  },
+  "trigger": {
+    "displayName": "Amazon Bedrock AgentCore Service",
+    "shortDisplayName": "AgentCore Agent",
+    "description": "Create a service that runs on Amazon Bedrock AgentCore Runtime under the HTTP protocol.",
+    "type": "agentcore"
+  },
+  "listeners": [
+    {
+      "target": "$listener",
+      "metadata": {
+        "label": "AgentCore Listener",
+        "description": "Serves the AgentCore Runtime HTTP protocol: GET /ping and POST /invocations."
+      },
+      "form": {
+        "section": {
+          "label": "AgentCore Listener",
+          "description": "Attach the agent to a new or existing AgentCore listener."
+        },
+        "createNew": {
+          "label": "Create New Listener",
+          "description": "Define a new AgentCore listener in the project."
+        },
+        "useExisting": {
+          "label": "Use Existing Listener",
+          "description": "Attach to an AgentCore listener already declared in the project."
+        },
+        "listenerConfig": {
+          "label": "Listener Configuration",
+          "description": "Configure the AgentCore listener."
+        },
+        "existingListener": {
+          "label": "Listener",
+          "description": "Select an existing AgentCore listener to attach the agent to."
+        }
+      },
+      "formFields": {
+        "listenerVarName": {
+          "key": "listenerVarName",
+          "default": "agentCoreListener",
+          "metadata": {
+            "label": "Listener Name",
+            "description": "Provide a name for the listener being created"
+          },
+          "state": {
+            "enabled": true,
+            "editable": true,
+            "optional": false,
+            "advanced": false
+          }
+        },
+        "listenOn": {
+          "key": "listenOn",
+          "placeholder": "8080",
+          "metadata": {
+            "label": "Port",
+            "description": "The port to listen on, or an existing http:Listener to share. Leave it empty to use 8080, which is what AgentCore Runtime expects."
+          },
+          "state": {
+            "enabled": true,
+            "editable": true,
+            "optional": true,
+            "advanced": true
+          }
+        }
+      }
+    }
+  ],
+  "serviceTypes": [
+    {
+      "target": "$service",
+      "metadata": {
+        "label": "Amazon Bedrock AgentCore Service",
+        "description": "Handles AgentCore invocations through fixed resources. The listener reads the AgentCore request headers and maps results and errors to JSON responses, so the resources contain only agent logic."
+      },
+      "handlers": [
+        {
+          "target": "$service.invoke",
+          "metadata": {
+            "label": "Invoke",
+            "description": "Handles POST /invocations: runs the agent for each request and returns its result.",
+            "badge": "POST"
+          },
+          "state": {
+            "editable": false
+          },
+          "nameEditable": false,
+          "canAddParameters": false,
+          "parameters": [
+            {
+              "target": "$service.invoke.payload",
+              "metadata": {
+                "label": "Payload",
+                "description": "The JSON request body, bound to the type you declare, such as json or a record."
+              },
+              "state": {
+                "editable": false,
+                "typeEditable": false
+              }
+            },
+            {
+              "target": "$service.invoke.ctx",
+              "metadata": {
+                "label": "AgentCore Context",
+                "description": "The session ID, workload access token and other AgentCore values of the invocation."
+              },
+              "state": {
+                "editable": false,
+                "typeEditable": false
+              }
+            }
+          ],
+          "returnType": {
+            "target": "$service.invoke.returns",
+            "state": {
+              "editable": false,
+              "typeEditable": false
+            }
+          }
+        },
+        {
+          "target": "$service.ping",
+          "metadata": {
+            "label": "Ping",
+            "description": "Handles GET /ping, AgentCore's health check. Keep it cheap and never call the model here.",
+            "badge": "GET"
+          },
+          "state": {
+            "editable": false
+          },
+          "nameEditable": false,
+          "canAddParameters": false,
+          "returnType": {
+            "target": "$service.ping.returns",
+            "state": {
+              "editable": false,
+              "typeEditable": false
+            }
+          }
+        }
+      ]
+    }
+  ],
+  "artifactInfo": {
+    "displayLabel": "Amazon Bedrock AgentCore Service",
+    "icon": {
+      "lightPath": "icons/light.svg",
+      "darkPath": "icons/dark.svg"
+    }
+  }
+}

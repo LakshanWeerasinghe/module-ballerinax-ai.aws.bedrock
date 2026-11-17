@@ -1,0 +1,5 @@
+[package]
+org = "agentcore_tests"
+name = "unbindable_with_compilation_errors"
+version = "0.1.0"
+distribution = "2201.14.0"

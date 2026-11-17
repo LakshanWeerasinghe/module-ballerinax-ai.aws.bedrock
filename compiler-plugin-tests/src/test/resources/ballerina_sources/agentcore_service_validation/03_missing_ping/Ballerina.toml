@@ -1,0 +1,5 @@
+[package]
+org = "agentcore_tests"
+name = "missing_ping"
+version = "0.1.0"
+distribution = "2201.14.0"

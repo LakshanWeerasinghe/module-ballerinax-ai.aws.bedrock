@@ -65,12 +65,14 @@ if (tasks.names.contains('build')) {
         dependsOn(':ai.aws.bedrock-compiler-plugin:build')
         dependsOn(':ai.aws.bedrock-native:build')
         dependsOn(':ai.aws.bedrock-ballerina:build')
+        dependsOn(':ai.aws.bedrock-compiler-plugin-tests:build')
     }
 } else {
     tasks.register('build') {
         dependsOn(':ai.aws.bedrock-compiler-plugin:build')
         dependsOn(':ai.aws.bedrock-native:build')
         dependsOn(':ai.aws.bedrock-ballerina:build')
+        dependsOn(':ai.aws.bedrock-compiler-plugin-tests:build')
     }
 }
 

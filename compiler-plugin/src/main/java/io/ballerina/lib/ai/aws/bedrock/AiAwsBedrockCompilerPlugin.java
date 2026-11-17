@@ -18,6 +18,7 @@
 
 package io.ballerina.lib.ai.aws.bedrock;
 
+import io.ballerina.lib.ai.aws.bedrock.agentcore.AgentCoreCodeAnalyzer;
 import io.ballerina.projects.plugins.CompilerPlugin;
 import io.ballerina.projects.plugins.CompilerPluginContext;
 
@@ -31,5 +32,6 @@ public class AiAwsBedrockCompilerPlugin extends CompilerPlugin {
     @Override
     public void init(CompilerPluginContext context) {
         context.addCodeModifier(new AiAwsBedrockCodeModifier());
+        context.addCodeAnalyzer(new AgentCoreCodeAnalyzer());
     }
 }

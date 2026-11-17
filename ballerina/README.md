@@ -11,6 +11,7 @@ The AWS Bedrock connector provides model, embedding and knowledge base providers
 - A choice of API per model: Converse (default), InvokeModel, Anthropic Messages, Chat Completions and Responses
 - Text embeddings with Amazon Titan and Cohere models
 - Managed and self-managed Bedrock knowledge bases
+- A listener that runs an agent on Amazon Bedrock AgentCore Runtime (`ai.aws.bedrock.agentcore`)
 - Guardrails, image input, and cross-region inference profiles
 - Flexible credential configuration: static keys, AWS profiles, assumed roles, the default AWS credential provider chain, or Bedrock API keys
 
@@ -143,6 +144,10 @@ check kb.ingest(docs);
 `ingest()` needs a `CUSTOM` data source on the knowledge base. One is created along with a new knowledge base. For an existing one, add it in the Bedrock console.
 
 `SelfManagedKnowledgeBase` takes the same arguments and works with a knowledge base backed by a vector store you own (OpenSearch Serverless, OpenSearch managed cluster, S3 Vectors, Aurora PostgreSQL, Neptune Analytics, Pinecone, Redis Enterprise Cloud or MongoDB Atlas). The vector store must already exist.
+
+## AgentCore Runtime
+
+The `ai.aws.bedrock.agentcore` module runs a Ballerina agent on [Amazon Bedrock AgentCore Runtime](https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/agents-tools-runtime.html). Its `agentcore:Listener` serves `GET /ping` and `POST /invocations` on port 8080 under the HTTP protocol contract. See the module's documentation and the `examples/agentcore-runtime-agent` example in the repository.
 
 ## Notes
 

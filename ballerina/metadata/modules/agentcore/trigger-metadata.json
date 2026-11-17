@@ -1,0 +1,245 @@
+{
+  "version": "v1.0",
+  "listeners": [
+    {
+      "id": "$listener",
+      "doc": "Runs the attached service on Amazon Bedrock AgentCore Runtime under the HTTP protocol contract. Serves GET /ping and POST /invocations on port 8080 by default, or on the given port, or shares an existing http:Listener. Builds an agentcore:Context from the AgentCore request headers and maps results and errors to JSON responses, so the service contains only agent logic.",
+      "type": {
+        "name": "Listener",
+        "packageInfo": {
+          "org": "ballerinax",
+          "packageName": "ai.aws.bedrock",
+          "moduleName": "ai.aws.bedrock.agentcore",
+          "version": "1.1.0"
+        }
+      },
+      "services": [
+        "$service"
+      ],
+      "multipleServicesAllowed": false
+    }
+  ],
+  "serviceTypes": [
+    {
+      "id": "$service",
+      "doc": "An agent hosted on Amazon Bedrock AgentCore Runtime. It declares the required get ping and post invocations resources and is always attached at the root base path, because AgentCore calls /ping and /invocations there. Remote functions and any other resources are compile errors.",
+      "type": {
+        "name": "InvocationService",
+        "packageInfo": {
+          "org": "ballerinax",
+          "packageName": "ai.aws.bedrock",
+          "moduleName": "ai.aws.bedrock.agentcore",
+          "version": "1.1.0"
+        }
+      },
+      "concrete": false,
+      "multipleListenersAllowed": true,
+      "handlers": {
+        "backedByConcreteType": false,
+        "options": [
+          {
+            "id": "$service.invoke",
+            "name": "invocations",
+            "kind": "resource",
+            "doc": "Handles POST /invocations, the agent's entry point. Runs the agent on the JSON request payload and returns its result, which is sent as 200 with a JSON body.",
+            "presence": "required",
+            "accessor": {
+              "presence": "required",
+              "values": [
+                "post"
+              ]
+            },
+            "path": {
+              "presence": "required",
+              "values": [
+                "invocations"
+              ]
+            },
+            "params": [
+              {
+                "id": "$service.invoke.payload",
+                "name": "payload",
+                "doc": "The JSON request body, bound to the declared type: json, a user-defined record or another anydata type. A string payload is read as a JSON string, and byte[] receives the raw body. A body that cannot be bound is answered with 400 before the resource runs.",
+                "type": {
+                  "name": "anydata",
+                  "builtin": true
+                },
+                "presence": "optional",
+                "dataBinding": {
+                  "typedescs": [
+                    {
+                      "constraint": {
+                        "name": "anydata",
+                        "builtin": true
+                      },
+                      "shapes": [
+                        {
+                          "form": "bare"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                "annotations": [
+                  "$payload"
+                ]
+              },
+              {
+                "id": "$service.invoke.ctx",
+                "name": "ctx",
+                "doc": "The AgentCore context of the invocation: the session ID, a request ID, the workload access token, the OAuth2 callback URL, the inbound Authorization header, the allowlisted custom headers and the request headers.",
+                "type": {
+                  "name": "Context",
+                  "packageInfo": {
+                    "org": "ballerinax",
+                    "packageName": "ai.aws.bedrock",
+                    "moduleName": "ai.aws.bedrock.agentcore",
+                    "version": "1.1.0"
+                  }
+                },
+                "presence": "optional"
+              }
+            ],
+            "returns": {
+              "id": "$service.invoke.returns",
+              "type": [
+                {
+                  "name": "anydata",
+                  "builtin": true
+                },
+                {
+                  "name": "Response",
+                  "packageInfo": {
+                    "org": "ballerina",
+                    "packageName": "http",
+                    "moduleName": "http",
+                    "version": "2.18.2"
+                  }
+                },
+                {
+                  "name": "StatusCodeResponse",
+                  "subtypeFamily": true,
+                  "packageInfo": {
+                    "org": "ballerina",
+                    "packageName": "http",
+                    "moduleName": "http",
+                    "version": "2.18.2"
+                  }
+                },
+                {
+                  "name": "error",
+                  "builtin": true
+                }
+              ],
+              "dataBinding": {
+                "typedescs": [
+                  {
+                    "constraint": {
+                      "name": "anydata",
+                      "builtin": true
+                    },
+                    "excludes": [
+                      {
+                        "name": "StatusCodeResponse",
+                        "subtypeFamily": true,
+                        "packageInfo": {
+                          "org": "ballerina",
+                          "packageName": "http",
+                          "moduleName": "http",
+                          "version": "2.18.2"
+                        }
+                      }
+                    ],
+                    "shapes": [
+                      {
+                        "form": "bare"
+                      }
+                    ]
+                  },
+                  {
+                    "constraint": {
+                      "name": "anydata",
+                      "builtin": true
+                    },
+                    "shapes": [
+                      {
+                        "form": "included",
+                        "envelope": {
+                          "name": "StatusCodeResponse",
+                          "subtypeFamily": true,
+                          "packageInfo": {
+                            "org": "ballerina",
+                            "packageName": "http",
+                            "moduleName": "http",
+                            "version": "2.18.2"
+                          }
+                        },
+                        "bindableFields": [
+                          "body",
+                          "headers"
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              }
+            }
+          },
+          {
+            "id": "$service.ping",
+            "name": "ping",
+            "kind": "resource",
+            "doc": "Serves the GET /ping health check. Return agentcore:HEALTHY when the agent is ready for work, or agentcore:HEALTHY_BUSY while it runs background work, which keeps the AgentCore session alive. Takes no parameters; keep it cheap and never call the model here.",
+            "presence": "required",
+            "accessor": {
+              "presence": "required",
+              "values": [
+                "get"
+              ]
+            },
+            "path": {
+              "presence": "required",
+              "values": [
+                "ping"
+              ]
+            },
+            "returns": {
+              "id": "$service.ping.returns",
+              "type": [
+                {
+                  "name": "PingStatus",
+                  "packageInfo": {
+                    "org": "ballerinax",
+                    "packageName": "ai.aws.bedrock",
+                    "moduleName": "ai.aws.bedrock.agentcore",
+                    "version": "1.1.0"
+                  }
+                },
+                {
+                  "name": "error",
+                  "builtin": true
+                }
+              ]
+            }
+          }
+        ]
+      }
+    }
+  ],
+  "annotations": [
+    {
+      "id": "$payload",
+      "type": {
+        "name": "Payload",
+        "packageInfo": {
+          "org": "ballerina",
+          "packageName": "http",
+          "moduleName": "http",
+          "version": "2.18.2"
+        }
+      },
+      "attachPoint": "parameter",
+      "presence": "required"
+    }
+  ]
+}
