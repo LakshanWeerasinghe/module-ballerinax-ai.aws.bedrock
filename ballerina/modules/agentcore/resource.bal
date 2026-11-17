@@ -67,7 +67,8 @@ isolated function bindPayloadBytes(byte[] body, typedesc<anydata> payloadType)
         return ();
     }
     if payloadType is typedesc<byte[]?> {
-        anydata|error bytes = body.ensureType(payloadType);
+        // Built for the declared type, so `byte[] & readonly` gets an immutable copy and `byte[]` a mutable one.
+        anydata|error bytes = body.cloneWithType(payloadType);
         return bytes is error ? payloadBindingError(PAYLOAD_TYPE_MISMATCH_MESSAGE, bytes) : bytes;
     }
     if body.length() == 0 {
@@ -113,11 +114,11 @@ isolated function invokeResource(DispatcherService dispatcher, string accessor, 
     'class: NATIVE_RESOURCE_INVOKER
 } external;
 
-isolated function setUserService(DispatcherService dispatcher, Service agentCoreService) = @java:Method {
+isolated function setUserService(DispatcherService dispatcher, InvocationService agentCoreService) = @java:Method {
     'class: NATIVE_SERVICE_ADAPTOR
 } external;
 
-isolated function getUserService(DispatcherService dispatcher) returns Service? = @java:Method {
+isolated function getUserService(DispatcherService dispatcher) returns InvocationService? = @java:Method {
     'class: NATIVE_SERVICE_ADAPTOR
 } external;
 
@@ -125,17 +126,17 @@ isolated function unlinkUserService(DispatcherService dispatcher) = @java:Method
     'class: NATIVE_SERVICE_ADAPTOR
 } external;
 
-isolated function registerDispatcher(Service agentCoreService, Listener agentCoreListener,
+isolated function registerDispatcher(InvocationService agentCoreService, Listener agentCoreListener,
         DispatcherService dispatcher) returns boolean = @java:Method {
     'class: NATIVE_SERVICE_ADAPTOR
 } external;
 
-isolated function getDispatcher(Service agentCoreService, Listener agentCoreListener)
+isolated function getDispatcher(InvocationService agentCoreService, Listener agentCoreListener)
         returns DispatcherService? = @java:Method {
     'class: NATIVE_SERVICE_ADAPTOR
 } external;
 
-isolated function removeDispatcher(Service agentCoreService, Listener agentCoreListener)
+isolated function removeDispatcher(InvocationService agentCoreService, Listener agentCoreListener)
         returns DispatcherService? = @java:Method {
     'class: NATIVE_SERVICE_ADAPTOR
 } external;

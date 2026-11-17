@@ -16,13 +16,13 @@
 
 import ballerinax/ai.aws.bedrock.agentcore;
 
-service agentcore:Service on new agentcore:Listener(9090) {
+service agentcore:InvocationService on new agentcore:Listener(9090) {
     resource function get ping() returns agentcore:PingStatus => agentcore:HEALTHY;
 
     resource function post invocations() returns stream<string, error?> => ["a"].toStream();
 }
 
-service agentcore:Service on new agentcore:Listener(9091) {
+service agentcore:InvocationService on new agentcore:Listener(9091) {
     resource function get ping() returns agentcore:PingStatus => agentcore:HEALTHY;
 
     resource function post invocations() returns json|stream<json>|error => "ok";

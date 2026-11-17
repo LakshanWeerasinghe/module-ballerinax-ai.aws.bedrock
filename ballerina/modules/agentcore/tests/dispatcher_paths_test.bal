@@ -32,7 +32,7 @@ isolated class FailingCloseStream {
     public isolated function close() returns error? => error("close failed");
 }
 
-isolated function startOn(int port, Service agentCoreService) returns Listener|error {
+isolated function startOn(int port, InvocationService agentCoreService) returns Listener|error {
     Listener agentCoreListener = check new (port);
     check agentCoreListener.attach(agentCoreService);
     check agentCoreListener.'start();
@@ -41,7 +41,7 @@ isolated function startOn(int port, Service agentCoreService) returns Listener|e
 
 @test:Config
 function testPingWithUnsupportedParameter() returns error? {
-    Service agentCoreService = service object {
+    InvocationService agentCoreService = service object {
         resource function get ping(string extra) returns PingStatus => HEALTHY_BUSY;
 
         resource function post invocations() returns json => "ok";
@@ -53,7 +53,7 @@ function testPingWithUnsupportedParameter() returns error? {
 
 @test:Config
 function testPingReturningNonStatus() returns error? {
-    Service agentCoreService = service object {
+    InvocationService agentCoreService = service object {
         resource function get ping() returns string => "Bogus";
 
         resource function post invocations() returns json => "ok";
@@ -65,7 +65,7 @@ function testPingReturningNonStatus() returns error? {
 
 @test:Config
 function testServiceWithoutInvocations() returns error? {
-    Service agentCoreService = service object {
+    InvocationService agentCoreService = service object {
         resource function get ping() returns PingStatus => HEALTHY;
     };
     Listener agentCoreListener = check startOn(NO_INVOCATIONS_PORT, agentCoreService);
@@ -76,7 +76,7 @@ function testServiceWithoutInvocations() returns error? {
 
 @test:Config
 function testInvocationsWithUnsupportedParameter() returns error? {
-    Service agentCoreService = service object {
+    InvocationService agentCoreService = service object {
         resource function get ping() returns PingStatus => HEALTHY;
 
         resource function post invocations(json payload) returns json => payload;
@@ -89,7 +89,7 @@ function testInvocationsWithUnsupportedParameter() returns error? {
 
 @test:Config
 function testStreamWhoseCloseFails() returns error? {
-    Service agentCoreService = service object {
+    InvocationService agentCoreService = service object {
         resource function get ping() returns PingStatus => HEALTHY;
 
         resource function post invocations() returns stream<string, error?> =>
@@ -104,7 +104,7 @@ function testStreamWhoseCloseFails() returns error? {
 @test:Config
 function testDispatcherRegistry() returns error? {
     Listener agentCoreListener = check new (19706);
-    Service agentCoreService = newPingService();
+    InvocationService agentCoreService = newPingService();
     test:assertTrue(getDispatcher(agentCoreService, agentCoreListener) is ());
     check agentCoreListener.attach(agentCoreService);
     DispatcherService? dispatcher = getDispatcher(agentCoreService, agentCoreListener);

@@ -86,6 +86,18 @@ function startResponsesListener() returns error? {
                 "unavailable" => {
                     return error httpscerr:ServiceUnavailableError("upstream detail");
                 }
+                "status200" => {
+                    return error httpscerr:DefaultStatusCodeError("looks like success", statusCode = 200);
+                }
+                "status302" => {
+                    return error httpscerr:DefaultStatusCodeError("looks like a redirect", statusCode = 302);
+                }
+                "status0" => {
+                    return error httpscerr:DefaultStatusCodeError("no status", statusCode = 0);
+                }
+                "status999" => {
+                    return error httpscerr:DefaultStatusCodeError("out of range", statusCode = 999);
+                }
                 "panic" => {
                     panic error("boom");
                 }
@@ -162,6 +174,13 @@ function testStatusCodeErrors() returns error? {
 }
 
 @test:Config
+function testNonErrorStatusesBecome500() returns error? {
+    foreach string kind in ["status200", "status302", "status0", "status999"] {
+        check assertRawJson(check invokeKind(kind), 500, "{\"error\":\"Internal server error\"}");
+    }
+}
+
+@test:Config
 function testPanicIs500() returns error? {
     check assertRawJson(check invokeKind("panic"), 500, "{\"error\":\"Internal server error\"}");
     // The listener keeps serving after a panic.
@@ -186,7 +205,7 @@ const ISOLATED_PORT = 19504;
 @test:Config
 function testIsolatedServiceRunsAndPanics() returns error? {
     Listener agentCoreListener = check new (ISOLATED_PORT);
-    Service isolatedService = isolated service object {
+    InvocationService isolatedService = isolated service object {
         isolated resource function get ping() returns PingStatus => HEALTHY;
 
         isolated resource function post invocations(@http:Payload ResultRequest request) returns json {
@@ -212,7 +231,7 @@ function testUnknownKindDefaultsToString() returns error? {
 // A non-isolated service with a non-isolated resource and mutable state runs under the runtime's lock, as it would on
 // an http:Listener.
 service class CountingService {
-    *Service;
+    *InvocationService;
     int count = 0;
 
     resource function get ping() returns PingStatus => HEALTHY;

@@ -45,6 +45,10 @@ const OPTIONAL_PORT = 19205;
 const CONTEXT_ONLY_PORT = 19206;
 const NO_PARAMS_PORT = 19207;
 const PAYLOAD_FIRST_PORT = 19208;
+const READONLY_BYTES_PORT = 19209;
+const MUTABLE_BYTES_PORT = 19210;
+
+type ReadonlyBytes byte[] & readonly;
 
 final Listener jsonListener = check new (JSON_PORT);
 final Listener recordListener = check new (RECORD_PORT);
@@ -54,6 +58,8 @@ final Listener optionalListener = check new (OPTIONAL_PORT);
 final Listener contextOnlyListener = check new (CONTEXT_ONLY_PORT);
 final Listener noParamsListener = check new (NO_PARAMS_PORT);
 final Listener payloadFirstListener = check new (PAYLOAD_FIRST_PORT);
+final Listener readonlyBytesListener = check new (READONLY_BYTES_PORT);
+final Listener mutableBytesListener = check new (MUTABLE_BYTES_PORT);
 
 @test:BeforeSuite
 function startInvocationListeners() returns error? {
@@ -107,8 +113,22 @@ function startInvocationListeners() returns error? {
         resource function post invocations(@http:Payload json payload, Context ctx) returns json =>
             {payload, sessionId: ctx.sessionId};
     });
+    check readonlyBytesListener.attach(service object {
+        resource function get ping() returns PingStatus => HEALTHY;
+
+        resource function post invocations(@http:Payload ReadonlyBytes bytes) returns json =>
+            {length: bytes.length(), isReadOnly: bytes is readonly};
+    });
+    check mutableBytesListener.attach(service object {
+        resource function get ping() returns PingStatus => HEALTHY;
+
+        resource function post invocations(@http:Payload byte[] bytes) returns int {
+            bytes.push(0);
+            return bytes.length();
+        }
+    });
     foreach Listener l in [jsonListener, recordListener, stringListener, bytesListener, optionalListener,
-            contextOnlyListener, noParamsListener, payloadFirstListener] {
+            contextOnlyListener, noParamsListener, payloadFirstListener, readonlyBytesListener, mutableBytesListener] {
         check l.'start();
     }
 }
@@ -116,7 +136,7 @@ function startInvocationListeners() returns error? {
 @test:AfterSuite
 function stopInvocationListeners() returns error? {
     foreach Listener l in [jsonListener, recordListener, stringListener, bytesListener, optionalListener,
-            contextOnlyListener, noParamsListener, payloadFirstListener] {
+            contextOnlyListener, noParamsListener, payloadFirstListener, readonlyBytesListener, mutableBytesListener] {
         check l.immediateStop();
     }
 }
@@ -193,6 +213,17 @@ function testStringPayloadRejectsOtherJson() returns error? {
 function testBytesPayload() returns error? {
     http:Response response = check postRaw(BYTES_PORT, [0, 1, 2, 255], "application/octet-stream");
     check assertJsonResponse(response, 200, 4);
+}
+
+@test:Config
+function testReadonlyBytesPayload() returns error? {
+    check assertJsonResponse(check postRaw(READONLY_BYTES_PORT, [1, 2, 3], "application/octet-stream"), 200,
+        {length: 3, isReadOnly: true});
+}
+
+@test:Config
+function testMutableBytesPayload() returns error? {
+    check assertJsonResponse(check postRaw(MUTABLE_BYTES_PORT, [1, 2, 3], "application/octet-stream"), 200, 4);
 }
 
 @test:Config

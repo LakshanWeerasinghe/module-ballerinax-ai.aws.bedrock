@@ -24,8 +24,8 @@ import java.util.IdentityHashMap;
 import java.util.Map;
 
 /**
- * Links an {@code agentcore:Service} with the internal dispatcher services that {@code agentcore:Listener} attaches
- * to the {@code http:Listener} in its place.
+ * Links an {@code agentcore:InvocationService} with the internal dispatcher services that {@code agentcore:Listener}
+ * attaches to the {@code http:Listener} in its place.
  *
  * <p>Each dispatcher holds the user's service as native data, so the dispatcher stays {@code isolated}. The user's
  * service keeps one dispatcher per listener, so {@code detach} on one listener never touches another listener's

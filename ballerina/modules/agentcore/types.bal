@@ -18,7 +18,7 @@ import ballerina/http;
 
 # A service that runs on Amazon Bedrock AgentCore Runtime under the HTTP protocol.
 # It declares `resource function get ping()` and `resource function post invocations(...)`.
-public type Service distinct service object {
+public type InvocationService distinct service object {
     *http:Service;
 };
 
@@ -32,10 +32,18 @@ public type ListenerConfiguration record {|
     // bedrock-agentcore-limits: synchronous requests time out after 15 minutes. The http default of 60 seconds
     // would end a longer agent turn before AgentCore gives up.
     decimal timeout = 900;
-    // runtime-header-allowlist: up to 20 custom headers of up to 4 KB each, on top of the platform headers and a
-    // JWT. The http default of 8 KB would reject such a request with a 431.
-    http:RequestLimitConfigs requestLimits = {maxHeaderSize: 98304};
+    RequestLimitConfigs requestLimits = {};
     decimal gracefulStopTimeout = 30;
+|};
+
+# Inbound request size limits, with AgentCore's header allowance as the default.
+#
+# + maxHeaderSize - runtime-header-allowlist: up to 20 custom headers of up to 4 KB each, on
+#                   top of the platform headers and a JWT. A value built as an
+#                   `http:RequestLimitConfigs` carries http's 8 KB default instead.
+public type RequestLimitConfigs record {|
+    *http:RequestLimitConfigs;
+    int maxHeaderSize = 98304;
 |};
 
 # The health status reported on `GET /ping`.
@@ -49,7 +57,8 @@ public enum PingStatus {
 # The AgentCore context of an invocation. Declare a parameter of this type to receive it.
 #
 # + sessionId - The runtime session ID, if the caller sent one
-# + requestId - A UUID generated per request; AgentCore Runtime doesn't forward its request ID header
+# + requestId - The request ID header if the caller sent one, else a generated UUID. Caller-controlled: never use it as
+#               a trust or isolation key
 # + userId - Always `()`: AgentCore Runtime doesn't forward the runtime user ID header
 # + workloadAccessToken - The workload access token for AgentCore Identity
 # + oauth2CallbackUrl - The OAuth2 callback URL for AgentCore Identity
@@ -59,6 +68,7 @@ public enum PingStatus {
 # + headers - The raw request headers
 public type Context record {|
     string? sessionId = ();
+    // AgentCore Runtime doesn't forward `X-Amzn-Bedrock-AgentCore-Runtime-Request-Id`, so in practice this is generated.
     string requestId;
     string? userId = ();
     string? workloadAccessToken = ();

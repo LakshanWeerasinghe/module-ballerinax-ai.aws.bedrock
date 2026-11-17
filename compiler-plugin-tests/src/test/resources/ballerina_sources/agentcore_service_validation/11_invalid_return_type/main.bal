@@ -20,13 +20,13 @@ import ballerinax/ai.aws.bedrock.agentcore;
 class Holder {
 }
 
-service agentcore:Service on new agentcore:Listener(9090) {
+service agentcore:InvocationService on new agentcore:Listener(9090) {
     resource function get ping() returns agentcore:PingStatus => agentcore:HEALTHY;
 
     resource function post invocations() returns json|Holder => "ok";
 }
 
-service agentcore:Service on new agentcore:Listener(9091) {
+service agentcore:InvocationService on new agentcore:Listener(9091) {
     resource function get ping() returns agentcore:PingStatus => agentcore:HEALTHY;
 
     resource function post invocations() returns http:Request => new;

@@ -49,7 +49,7 @@ AgentCore shows the caller a `424` for any 4xx or 5xx from the agent, so the lis
 
 `agentcore:Context` holds the session ID, a request ID, the workload access token, the OAuth2 callback URL, the inbound `Authorization` header, the allowlisted custom headers and the request headers. The listener never logs the token, `Authorization`, custom header values or the body.
 
-AgentCore Runtime doesn't forward its request ID or runtime user ID headers to the container, so `requestId` is a UUID generated per request and `userId` is always `()`. A call made with a runtime user ID arrives with a workload access token in `workloadAccessToken` instead.
+AgentCore Runtime doesn't forward its request ID or runtime user ID headers to the container, so `requestId` is generated in practice and `userId` is always `()`. A caller can still set the request ID header, so never use `requestId` as a trust or isolation key. A call made with a runtime user ID arrives with a workload access token in `workloadAccessToken` instead.
 
 ## Listener configuration
 

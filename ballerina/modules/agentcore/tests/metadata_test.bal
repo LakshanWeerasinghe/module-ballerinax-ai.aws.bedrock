@@ -18,8 +18,8 @@ import ballerina/io;
 import ballerina/test;
 
 // Tests run from the package root, where the metadata lives.
-const TRIGGER_METADATA = "metadata/trigger-metadata.json";
-const TRIGGER_UI_METADATA = "metadata/trigger-ui-metadata.json";
+const TRIGGER_METADATA = "metadata/modules/agentcore/trigger-metadata.json";
+const TRIGGER_UI_METADATA = "metadata/modules/agentcore/trigger-ui-metadata.json";
 
 @test:Config
 function testTriggerMetadataMatchesDispatcher() returns error? {
@@ -33,7 +33,7 @@ function testTriggerMetadataMatchesDispatcher() returns error? {
     test:assertTrue(ballerinaToml.includes(string `version = "${version}"`), version);
 
     json[] serviceTypes = check (check metadata.serviceTypes).ensureType();
-    test:assertEquals(check serviceTypes[0].'type.name, "Service");
+    test:assertEquals(check serviceTypes[0].'type.name, "InvocationService");
     json[] handlers = check (check serviceTypes[0].handlers.options).ensureType();
     map<string> pathsByAccessor = {};
     foreach json handler in handlers {

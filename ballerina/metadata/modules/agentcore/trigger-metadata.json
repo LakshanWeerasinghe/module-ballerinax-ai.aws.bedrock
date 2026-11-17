@@ -24,7 +24,7 @@
       "id": "$service",
       "doc": "An agent hosted on Amazon Bedrock AgentCore Runtime. It declares the required get ping and post invocations resources and is always attached at the root base path, because AgentCore calls /ping and /invocations there. Remote functions and any other resources are compile errors.",
       "type": {
-        "name": "Service",
+        "name": "InvocationService",
         "packageInfo": {
           "org": "ballerinax",
           "packageName": "ai.aws.bedrock",

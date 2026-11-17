@@ -17,7 +17,7 @@
 import ballerina/http;
 import ballerina/test;
 
-isolated function newPingService() returns Service => service object {
+isolated function newPingService() returns InvocationService => service object {
     resource function get ping() returns PingStatus => HEALTHY;
 
     resource function post invocations() returns json => "ok";
@@ -26,7 +26,7 @@ isolated function newPingService() returns Service => service object {
 @test:Config
 function testDefaultPort() returns error? {
     Listener agentCoreListener = check new;
-    Service agentCoreService = newPingService();
+    InvocationService agentCoreService = newPingService();
     check agentCoreListener.attach(agentCoreService);
     check agentCoreListener.'start();
     http:Client cl = check new ("http://localhost:8080");
@@ -49,7 +49,7 @@ function testExplicitPort() returns error? {
 @test:Config
 function testAttachRequiresRootBasePath() returns error? {
     Listener agentCoreListener = check new (19102);
-    Service agentCoreService = newPingService();
+    InvocationService agentCoreService = newPingService();
     error? result = agentCoreListener.attach(agentCoreService, "agent");
     test:assertTrue(result is error);
     test:assertTrue((<error>result).message().includes("root base path"));
@@ -66,7 +66,7 @@ function testAttachRequiresRootBasePath() returns error? {
 @test:Config
 function testDoubleAttachFails() returns error? {
     Listener agentCoreListener = check new (19103);
-    Service agentCoreService = newPingService();
+    InvocationService agentCoreService = newPingService();
     check agentCoreListener.attach(agentCoreService);
     error? result = agentCoreListener.attach(agentCoreService);
     test:assertTrue(result is error);
@@ -81,7 +81,7 @@ function testDoubleAttachFails() returns error? {
 @test:Config
 function testDetach() returns error? {
     Listener agentCoreListener = check new (19104);
-    Service agentCoreService = newPingService();
+    InvocationService agentCoreService = newPingService();
     check agentCoreListener.attach(agentCoreService);
     check agentCoreListener.'start();
     http:Client cl = check new ("http://localhost:19104");
@@ -104,7 +104,7 @@ function testDetach() returns error? {
 function testDetachFromOneOfTwoListeners() returns error? {
     Listener first = check new (19105);
     Listener second = check new (19106);
-    Service agentCoreService = newPingService();
+    InvocationService agentCoreService = newPingService();
     check first.attach(agentCoreService);
     check second.attach(agentCoreService);
     check first.'start();
@@ -167,6 +167,15 @@ function testLargeAllowlistedHeadersAccepted() returns error? {
     test:assertEquals(response.statusCode, 200);
     check agentCoreListener.immediateStop();
 
+    // Overriding another limit keeps the header allowance.
+    Listener partialLimits = check new (19111, requestLimits = {maxEntityBodySize: 2097152});
+    check partialLimits.attach(newPingService());
+    check partialLimits.'start();
+    http:Client partialClient = check new ("http://localhost:19111");
+    response = check partialClient->post("/invocations", {}, headers);
+    test:assertEquals(response.statusCode, 200);
+    check partialLimits.immediateStop();
+
     // The http default of 8 KB rejects the same request.
     http:Listener httpListener = check new (19110);
     Listener sharing = check new (httpListener);
@@ -176,6 +185,22 @@ function testLargeAllowlistedHeadersAccepted() returns error? {
     response = check defaultClient->post("/invocations", {}, headers);
     test:assertEquals(response.statusCode, 431);
     check httpListener.immediateStop();
+}
+
+@test:Config
+function testRequestLimitsMergeFieldByField() {
+    // Setting another limit keeps AgentCore's header allowance.
+    ListenerConfiguration partial = {requestLimits: {maxEntityBodySize: 2097152}};
+    test:assertEquals(partial.requestLimits.maxHeaderSize, 98304);
+    test:assertEquals(partial.requestLimits.maxEntityBodySize, 2097152);
+    // Every value stays selectable, including http's own default.
+    ListenerConfiguration explicit = {requestLimits: {maxHeaderSize: 8192}};
+    test:assertEquals(explicit.requestLimits.maxHeaderSize, 8192);
+    // A value built as `http:RequestLimitConfigs` keeps http's default.
+    http:RequestLimitConfigs httpLimits = {};
+    test:assertEquals(httpLimits.maxHeaderSize, 8192);
+    ListenerConfiguration fromHttp = {requestLimits: httpLimits};
+    test:assertEquals(fromHttp.requestLimits.maxHeaderSize, 8192);
 }
 
 @test:Config

@@ -23,7 +23,7 @@ type Question record {|
 
 listener agentcore:Listener agentCoreListener = new;
 
-service agentcore:Service on agentCoreListener {
+service agentcore:InvocationService on agentCoreListener {
     resource function get ping() returns agentcore:PingStatus => agentcore:HEALTHY;
 
     resource function post invocations(agentcore:Context ctx, @http:Payload Question question) returns json|error {
@@ -50,7 +50,7 @@ service "/" on new agentcore:Listener(9091) {
 }
 
 service class Agent {
-    *agentcore:Service;
+    *agentcore:InvocationService;
 
     resource function get ping() returns agentcore:PingStatus => agentcore:HEALTHY;
 

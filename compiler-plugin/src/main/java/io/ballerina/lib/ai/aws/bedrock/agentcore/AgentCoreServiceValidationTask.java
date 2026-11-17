@@ -72,7 +72,7 @@ import static io.ballerina.lib.ai.aws.bedrock.agentcore.AgentCoreDiagnostic.UNSU
 import static io.ballerina.lib.ai.aws.bedrock.agentcore.AgentCoreDiagnostic.UNSUPPORTED_RESOURCE;
 
 /**
- * Validates an {@code agentcore:Service} against what the listener's dispatcher can call.
+ * Validates an {@code agentcore:InvocationService} against what the listener's dispatcher can call.
  *
  * <ul>
  * <li>the service declares {@code get ping} and {@code post invocations}, and no other resource or remote
@@ -83,7 +83,7 @@ import static io.ballerina.lib.ai.aws.bedrock.agentcore.AgentCoreDiagnostic.UNSU
  * {@code anydata|http:Response|http:StatusCodeResponse|error}, never a stream;</li>
  * <li>a service declaration is attached at the root base path.</li>
  * </ul>
- * Only services whose type is a subtype of {@code agentcore:Service} are validated, so users of the root
+ * Only services whose type is a subtype of {@code agentcore:InvocationService} are validated, so users of the root
  * {@code ai.aws.bedrock} module are never affected. A service declaration without a type descriptor is validated
  * when it is attached to an {@code agentcore:Listener}. Adapted from {@code FoundryServiceValidationTask} in
  * {@code ballerina-platform/module-ballerinax-ai.azure} at {@code f4abc4e}.
@@ -97,7 +97,7 @@ public class AgentCoreServiceValidationTask implements AnalysisTask<SyntaxNodeAn
     private static final String AGENTCORE_MODULE = "ai.aws.bedrock.agentcore";
     private static final String HTTP_MODULE = "http";
     private static final String EMPTY_VERSION = "";
-    private static final String SERVICE_TYPE = "Service";
+    private static final String SERVICE_TYPE = "InvocationService";
     private static final String CONTEXT_TYPE = "Context";
     private static final String LISTENER_TYPE = "Listener";
     private static final String PING_STATUS_TYPE = "PingStatus";

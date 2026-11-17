@@ -25,7 +25,7 @@ const INTERNAL_SERVER_ERROR_MESSAGE = "Internal server error";
 # user's own resource.
 type InvocationResponse http:Response|http:StatusCodeResponse;
 
-# The internal service the listener attaches in place of the user's `agentcore:Service`. The user's service is
+# The internal service the listener attaches in place of the user's `agentcore:InvocationService`. The user's service is
 # linked to it as native data, so it holds no Ballerina mutable state of its own.
 isolated service class DispatcherService {
     *http:Service;
@@ -78,7 +78,7 @@ isolated service class DispatcherService {
     isolated function invoke(http:Request request, Context context) returns InvocationResponse {
         ResourceSignature|error? signature = getResourceSignature(self, http:HTTP_POST, [INVOCATIONS_PATH]);
         if signature is () {
-            return errorResultResponse(error("the agentcore:Service declares no 'post invocations' resource"),
+            return errorResultResponse(error("the agentcore:InvocationService declares no 'post invocations' resource"),
                     context);
         }
         if signature is error {
@@ -195,6 +195,10 @@ isolated function errorResultResponse(error err, Context context) returns http:R
     // a generic message: AgentCore shows the caller only a 424, and the message could leak internals. The error and its
     // cause chain are logged, since CloudWatch is the only place to diagnose a 424.
     int statusCode = statusCodeOf(err);
+    // A `DefaultStatusCodeError` can carry any status; outside 4xx and 5xx it would read as a success or a redirect.
+    if statusCode < 400 || statusCode > 599 {
+        statusCode = http:STATUS_INTERNAL_SERVER_ERROR;
+    }
     if statusCode < 500 {
         log:printWarn("The invocation was rejected", err, requestId = context.requestId,
                 sessionId = context.sessionId, status = statusCode);

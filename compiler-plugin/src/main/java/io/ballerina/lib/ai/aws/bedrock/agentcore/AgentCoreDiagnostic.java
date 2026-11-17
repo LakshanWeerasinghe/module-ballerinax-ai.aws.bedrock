@@ -27,7 +27,7 @@ import io.ballerina.tools.diagnostics.Location;
 import static io.ballerina.tools.diagnostics.DiagnosticSeverity.ERROR;
 
 /**
- * Compilation diagnostics for an {@code agentcore:Service}. Each message is a {@link java.text.MessageFormat}
+ * Compilation diagnostics for an {@code agentcore:InvocationService}. Each message is a {@link java.text.MessageFormat}
  * template.
  *
  * @since 1.1.0
@@ -35,17 +35,17 @@ import static io.ballerina.tools.diagnostics.DiagnosticSeverity.ERROR;
 public enum AgentCoreDiagnostic {
 
     MISSING_INVOCATIONS_RESOURCE("AI_AWS_BEDROCK_AGENTCORE_101",
-            "an `agentcore:Service` must declare a `resource function post invocations`, which serves "
-                    + "`POST /invocations`.", ERROR),
+            "an `agentcore:InvocationService` must declare a `resource function post invocations`, "
+                    + "which serves `POST /invocations`.", ERROR),
     MISSING_PING_RESOURCE("AI_AWS_BEDROCK_AGENTCORE_102",
-            "an `agentcore:Service` must declare a `resource function get ping`, which serves the `GET /ping` "
-                    + "health check.", ERROR),
+            "an `agentcore:InvocationService` must declare a `resource function get ping`, which "
+                    + "serves the `GET /ping` health check.", ERROR),
     UNSUPPORTED_RESOURCE("AI_AWS_BEDROCK_AGENTCORE_103",
-            "the resource ''{0}'' is not supported in an `agentcore:Service`, which serves only `get ping` and "
-                    + "`post invocations`.", ERROR),
+            "the resource ''{0}'' is not supported in an `agentcore:InvocationService`, which "
+                    + "serves only `get ping` and `post invocations`.", ERROR),
     REMOTE_FUNCTION_NOT_ALLOWED("AI_AWS_BEDROCK_AGENTCORE_104",
-            "the remote function ''{0}'' is not allowed in an `agentcore:Service`; declare resource functions "
-                    + "instead.", ERROR),
+            "the remote function ''{0}'' is not allowed in an `agentcore:InvocationService`; "
+                    + "declare resource functions instead.", ERROR),
     PING_PARAMETER_NOT_ALLOWED("AI_AWS_BEDROCK_AGENTCORE_105",
             "the parameter ''{0}'' of the resource ''get ping'' is not supported: the resource must declare no "
                     + "parameters.", ERROR),
@@ -69,8 +69,8 @@ public enum AgentCoreDiagnostic {
             "the resource ''{0}'' returns a stream (''{1}''), but streaming is not supported yet; return the "
                     + "complete response instead.", ERROR),
     INVALID_BASE_PATH("AI_AWS_BEDROCK_AGENTCORE_113",
-            "an `agentcore:Service` must be attached at the root base path, because AgentCore calls `/ping` and "
-                    + "`/invocations` at the root; remove the base path ''{0}''.", ERROR);
+            "an `agentcore:InvocationService` must be attached at the root base path, because "
+                    + "AgentCore calls `/ping` and `/invocations` at the root; remove the base path ''{0}''.", ERROR);
 
     private final String code;
     private final String message;

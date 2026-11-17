@@ -16,7 +16,7 @@
 
 import ballerinax/ai.aws.bedrock.agentcore as ac;
 
-service ac:Service on new ac:Listener() {
+service ac:InvocationService on new ac:Listener() {
     resource function get ping(ac:Context ctx) returns ac:PingStatus => ac:HEALTHY;
 
     resource function post invocations(ac:Context ctx, int extra) returns json => "ok";

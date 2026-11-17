@@ -17,6 +17,7 @@
 import ballerina/ai;
 import ballerina/http;
 import ballerina/log;
+import ballerina/uuid;
 import ballerinax/ai.aws.bedrock;
 import ballerinax/ai.aws.bedrock.agentcore;
 import ballerinax/aws.auth;
@@ -91,11 +92,12 @@ service on agentCoreListener {
     resource function get ping() returns agentcore:PingStatus => agentcore:HEALTHY;
 
     resource function post invocations(@http:Payload Prompt payload, agentcore:Context ctx) returns json|error {
-        // One history per session. A call without a session ID gets the request ID, so sessionless calls never share
-        // history.
-        string memoryKey = ctx.sessionId ?: ctx.requestId;
+        // One history per session. A sessionless call gets a fresh UUID, never the caller-controlled request ID, and the
+        // two kinds of key are prefixed so that no header can select another conversation.
+        string? sessionId = ctx.sessionId;
+        string memoryKey = sessionId is string ? "session:" + sessionId : "oneoff:" + uuid:createType4AsString();
         string|error reply = conversationTurns(memoryKey).run(payload.prompt, memoryKey);
-        if ctx.sessionId is () {
+        if sessionId is () {
             // A sessionless call is never continued, so its history is dropped.
             forgetConversation(memoryKey);
         }

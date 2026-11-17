@@ -28,7 +28,7 @@ import ballerina/http;
 // The structure (dispatcher, native service link, reflective resource invoker) is adapted from the Foundry listener
 // of `ballerina-platform/module-ballerinax-ai.azure` at `f4abc4e`.
 
-# A listener that runs an `agentcore:Service` on Amazon Bedrock AgentCore Runtime.
+# A listener that runs an `agentcore:InvocationService` on Amazon Bedrock AgentCore Runtime.
 # It serves `GET /ping` and `POST /invocations` on port 8080 by default.
 public isolated class Listener {
     private final http:Listener httpListener;
@@ -51,9 +51,9 @@ public isolated class Listener {
     # + agentCoreService - The service to attach
     # + name - The base path; only the root is accepted
     # + return - An error if the base path is not the root or the service is already attached
-    public isolated function attach(Service agentCoreService, string[]|string? name = ()) returns error? {
+    public isolated function attach(InvocationService agentCoreService, string[]|string? name = ()) returns error? {
         if !isRootBasePath(name) {
-            return error(string `An agentcore:Service must be attached at the root base path, `
+            return error(string `An agentcore:InvocationService must be attached at the root base path, `
                 + string `because AgentCore calls /ping and /invocations there: got '${basePathToString(name)}'`);
         }
         // The dispatcher stands in for the user's service on the http:Listener. It is linked before it is
@@ -62,7 +62,7 @@ public isolated class Listener {
         setUserService(dispatcher, agentCoreService);
         if !registerDispatcher(agentCoreService, self, dispatcher) {
             unlinkUserService(dispatcher);
-            return error("The agentcore:Service is already attached to this agentcore:Listener");
+            return error("The agentcore:InvocationService is already attached to this agentcore:Listener");
         }
         error? result = self.httpListener.attach(dispatcher, name);
         if result is error {
@@ -76,7 +76,7 @@ public isolated class Listener {
     #
     # + agentCoreService - The service to detach
     # + return - An error if the service cannot be detached
-    public isolated function detach(Service agentCoreService) returns error? {
+    public isolated function detach(InvocationService agentCoreService) returns error? {
         // Only this listener's dispatcher is detached, so the service keeps working on any other listener.
         DispatcherService? dispatcher = removeDispatcher(agentCoreService, self);
         if dispatcher is () {

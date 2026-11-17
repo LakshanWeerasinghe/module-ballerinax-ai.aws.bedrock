@@ -18,7 +18,7 @@ import ballerinax/ai.aws.bedrock.agentcore;
 
 type Ctx agentcore:Context;
 
-service agentcore:Service on new agentcore:Listener() {
+service agentcore:InvocationService on new agentcore:Listener() {
     resource function get ping() returns agentcore:PingStatus => agentcore:HEALTHY;
 
     resource function post invocations(agentcore:Context first, Ctx second) returns json => first.requestId;

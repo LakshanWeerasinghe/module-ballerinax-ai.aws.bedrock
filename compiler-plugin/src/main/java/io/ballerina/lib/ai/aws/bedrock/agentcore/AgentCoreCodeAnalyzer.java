@@ -25,7 +25,7 @@ import io.ballerina.projects.plugins.CodeAnalyzer;
 import java.util.List;
 
 /**
- * Validates {@code agentcore:Service} declarations, service classes and service objects at compile time.
+ * Validates {@code agentcore:InvocationService} declarations, service classes and service objects at compile time.
  *
  * @since 1.1.0
  */

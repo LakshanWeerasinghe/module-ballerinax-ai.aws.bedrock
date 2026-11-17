@@ -37,7 +37,7 @@ import java.util.List;
 import java.util.stream.Collectors;
 
 /**
- * Tests the compile-time validation of {@code agentcore:Service}.
+ * Tests the compile-time validation of {@code agentcore:InvocationService}.
  *
  * <p>Each test compiles a sample package against a Ballerina distribution holding the freshly built
  * {@code ballerinax/ai.aws.bedrock} bala (see the {@code prepareBallerinaDistribution} task) and asserts the exact
@@ -154,8 +154,8 @@ public class AgentCoreServiceValidationTest {
     @Test
     public void testInvalidBasePath() {
         assertDiagnostics("13_invalid_base_path",
-                expect(INVALID_BASE_PATH, 19, 27, invalidBasePath("/agent")),
-                expect(INVALID_BASE_PATH, 25, 27, invalidBasePath("\"agent\"")));
+                expect(INVALID_BASE_PATH, 19, 37, invalidBasePath("/agent")),
+                expect(INVALID_BASE_PATH, 25, 37, invalidBasePath("\"agent\"")));
     }
 
     @Test
@@ -173,7 +173,7 @@ public class AgentCoreServiceValidationTest {
                 expect(MISSING_PING_RESOURCE, 19, 15, missingPingResource()),
                 expect(UNSUPPORTED_PARAMETER, 28, 40, unsupportedParameter("extra")),
                 expect(UNSUPPORTED_RESOURCE, 30, 23, unsupportedResource("get health")),
-                expect(MISSING_INVOCATIONS_RESOURCE, 33, 35, missingInvocationsResource()));
+                expect(MISSING_INVOCATIONS_RESOURCE, 33, 45, missingInvocationsResource()));
     }
 
     @Test
@@ -255,23 +255,23 @@ public class AgentCoreServiceValidationTest {
     }
 
     private static String missingInvocationsResource() {
-        return "an `agentcore:Service` must declare a `resource function post invocations`, which serves "
-                + "`POST /invocations`.";
+        return "an `agentcore:InvocationService` must declare a `resource function post invocations`, "
+                + "which serves `POST /invocations`.";
     }
 
     private static String missingPingResource() {
-        return "an `agentcore:Service` must declare a `resource function get ping`, which serves the `GET /ping` "
-                + "health check.";
+        return "an `agentcore:InvocationService` must declare a `resource function get ping`, which serves "
+                + "the `GET /ping` health check.";
     }
 
     private static String unsupportedResource(String resource) {
-        return "the resource '" + resource + "' is not supported in an `agentcore:Service`, which serves only "
-                + "`get ping` and `post invocations`.";
+        return "the resource '" + resource + "' is not supported in an `agentcore:InvocationService`, "
+                + "which serves only `get ping` and `post invocations`.";
     }
 
     private static String remoteFunctionNotAllowed(String function) {
-        return "the remote function '" + function + "' is not allowed in an `agentcore:Service`; declare resource "
-                + "functions instead.";
+        return "the remote function '" + function + "' is not allowed in an `agentcore:InvocationService`; "
+                + "declare resource functions instead.";
     }
 
     private static String pingParameterNotAllowed(String parameter) {
@@ -312,8 +312,8 @@ public class AgentCoreServiceValidationTest {
     }
 
     private static String invalidBasePath(String basePath) {
-        return "an `agentcore:Service` must be attached at the root base path, because AgentCore calls `/ping` and "
-                + "`/invocations` at the root; remove the base path '" + basePath + "'.";
+        return "an `agentcore:InvocationService` must be attached at the root base path, because AgentCore "
+                + "calls `/ping` and `/invocations` at the root; remove the base path '" + basePath + "'.";
     }
 
     /**

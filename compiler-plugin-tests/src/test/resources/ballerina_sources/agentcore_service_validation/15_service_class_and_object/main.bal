@@ -17,11 +17,11 @@
 import ballerinax/ai.aws.bedrock.agentcore;
 
 service class EmptyAgent {
-    *agentcore:Service;
+    *agentcore:InvocationService;
 }
 
 service class Agent {
-    *agentcore:Service;
+    *agentcore:InvocationService;
 
     resource function get ping() returns agentcore:PingStatus => agentcore:HEALTHY;
 
@@ -30,6 +30,6 @@ service class Agent {
     resource function get health() returns json => "no";
 }
 
-agentcore:Service objectService = service object {
+agentcore:InvocationService objectService = service object {
     resource function get ping() returns agentcore:PingStatus => agentcore:HEALTHY;
 };

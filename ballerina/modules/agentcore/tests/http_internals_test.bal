@@ -38,7 +38,7 @@ type InternalsPayload record {|
 
 @test:Config
 function testPayloadAnnotationDetected() returns error? {
-    Service agentCoreService = service object {
+    InvocationService agentCoreService = service object {
         resource function get ping() returns PingStatus => HEALTHY;
 
         resource function post invocations(Context ctx, @http:Payload InternalsPayload payload) returns json =>
@@ -64,7 +64,7 @@ function testPayloadAnnotationDetected() returns error? {
 
 @test:Config
 function testUnannotatedParameterRejected() returns error? {
-    Service agentCoreService = service object {
+    InvocationService agentCoreService = service object {
         resource function get ping() returns PingStatus => HEALTHY;
 
         resource function post invocations(json payload) returns json => payload;

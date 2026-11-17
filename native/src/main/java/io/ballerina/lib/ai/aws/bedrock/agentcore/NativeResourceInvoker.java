@@ -49,7 +49,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 
 /**
- * Finds a resource of the user's {@code agentcore:Service} and calls it on behalf of the internal dispatcher.
+ * Finds a resource of the user's {@code agentcore:InvocationService} and calls it on behalf of the internal dispatcher.
  *
  * <p>A resource is found by its accessor and path ({@code get [ping]}, {@code post [invocations]}). Each parameter
  * must be either the {@code @http:Payload} parameter or the {@code agentcore:Context} parameter, each at most once
@@ -135,7 +135,7 @@ public final class NativeResourceInvoker {
             userService = userService(dispatcher);
             resource = findResource(userService, accessor.getValue(), path.getStringArray());
             if (resource == null) {
-                return ErrorCreator.createError(StringUtils.fromString("the agentcore:Service declares no '"
+                return ErrorCreator.createError(StringUtils.fromString("the agentcore:InvocationService declares no '"
                         + describe(accessor.getValue(), path.getStringArray()) + "' resource"));
             }
             args = ResourceParams.of(resource, module).arguments(payload, context);
@@ -200,18 +200,18 @@ public final class NativeResourceInvoker {
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             return ErrorCreator.createError(StringUtils.fromString(
-                    "interrupted while waiting for the agentcore:Service resource"));
+                    "interrupted while waiting for the agentcore:InvocationService resource"));
         } catch (ExecutionException e) {
             // Not reached: the future is only ever completed normally.
             return ErrorCreator.createError(StringUtils.fromString(
-                    "waiting for the agentcore:Service resource failed"));
+                    "waiting for the agentcore:InvocationService resource failed"));
         }
     }
 
     // Only the class is named: the message could quote anything.
     private static BError callFailed(Throwable throwable) {
         return ErrorCreator.createError(StringUtils.fromString(
-                "calling the agentcore:Service resource failed with " + throwable.getClass().getName()));
+                "calling the agentcore:InvocationService resource failed with " + throwable.getClass().getName()));
     }
 
     /**
@@ -242,7 +242,8 @@ public final class NativeResourceInvoker {
         if (userService instanceof BObject service) {
             return service;
         }
-        throw ErrorCreator.createError(StringUtils.fromString("no agentcore:Service is linked with the dispatcher"));
+        throw ErrorCreator.createError(StringUtils.fromString("no agentcore:InvocationService is linked with "
+                + "the dispatcher"));
     }
 
     private static ResourceMethodType findResource(BObject userService, String accessor, String[] path) {
@@ -336,7 +337,7 @@ public final class NativeResourceInvoker {
 
         private static BError unsupported(String resourceName, String reason) {
             return ErrorCreator.createError(StringUtils.fromString("the '" + resourceName
-                    + "' resource of the agentcore:Service is not supported: " + reason));
+                    + "' resource of the agentcore:InvocationService is not supported: " + reason));
         }
     }
 
