@@ -211,3 +211,40 @@ function testListenerConfigurationDefaults() {
     test:assertEquals(config.requestLimits.maxHeaderSize, 98304);
     test:assertEquals(config.gracefulStopTimeout, 30d);
 }
+
+@test:Config
+function testSharedListenerRejectsConfig() returns error? {
+    http:Listener httpListener = check new (19111);
+    Listener|error agentCoreListener = new (httpListener, timeout = 120);
+    if agentCoreListener !is error {
+        test:assertFail("a configuration with a shared http:Listener was accepted");
+    }
+    test:assertTrue(agentCoreListener.message().includes("can't apply a configuration of its own"));
+    // A configuration equal to the defaults changes nothing, so it is accepted.
+    Listener _ = check new (httpListener, timeout = 900);
+}
+
+@test:Config
+function testSharedListenerBelowAgentCoreDefaults() returns error? {
+    http:Listener defaults = check new (19112);
+    string? warning = belowAgentCoreDefaults(defaults.getConfig());
+    if warning !is string {
+        test:assertFail("no warning for a shared listener with the http defaults");
+    }
+    test:assertTrue(warning.includes("timeout = 60"));
+    test:assertTrue(warning.includes("requestLimits.maxHeaderSize = 8192"));
+
+    http:Listener shortTimeout = check new (19113, timeout = 120, requestLimits = {maxHeaderSize: 98304});
+    test:assertTrue(belowAgentCoreDefaults(shortTimeout.getConfig()) is string);
+    http:Listener smallHeaders = check new (19114, timeout = 900);
+    test:assertTrue(belowAgentCoreDefaults(smallHeaders.getConfig()) is string);
+}
+
+@test:Config
+function testSharedListenerAtAgentCoreDefaults() returns error? {
+    http:Listener configured = check new (19115, timeout = 900, requestLimits = {maxHeaderSize: 98304});
+    test:assertEquals(belowAgentCoreDefaults(configured.getConfig()), ());
+    // A timeout of 0 disables it.
+    http:Listener noTimeout = check new (19116, timeout = 0, requestLimits = {maxHeaderSize: 131072});
+    test:assertEquals(belowAgentCoreDefaults(noTimeout.getConfig()), ());
+}

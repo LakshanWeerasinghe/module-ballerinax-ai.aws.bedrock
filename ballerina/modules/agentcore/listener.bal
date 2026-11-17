@@ -36,13 +36,22 @@ public isolated class Listener {
 
     # Initializes the listener.
     #
-    # + listenOn - The port (8080 by default), or an `http:Listener` to share. Create a shared one with
-    #              `timeout = 900` and `requestLimits = {maxHeaderSize: 98304}`, or the http defaults apply
-    # + config - The listener configuration, used only when the listener creates its own `http:Listener`
-    # + return - An error if the listener cannot be created
+    # + listenOn - The port (8080 by default), or an `http:Listener` to share. A shared one keeps its own
+    #              configuration; give it `timeout = 900` and `requestLimits = {maxHeaderSize: 98304}`
+    # + config - The listener configuration; with a shared `http:Listener`, anything but the defaults is an error
+    # + return - An error if the listener cannot be created, or if `config` is set with a shared `http:Listener`
     public isolated function init(int|http:Listener? listenOn = (), *ListenerConfiguration config) returns error? {
         if listenOn is http:Listener {
-            warnIfBelowAgentCoreDefaults(listenOn.getConfig());
+            // The shared listener is already created, so a configuration given here could never take effect.
+            ListenerConfiguration defaults = {};
+            if config != defaults {
+                return error("An agentcore:Listener that shares an http:Listener can't apply a configuration of its "
+                    + "own. Configure the http:Listener instead, or pass a port.");
+            }
+            string? warning = belowAgentCoreDefaults(listenOn.getConfig());
+            if warning is string {
+                log:printWarn(warning);
+            }
             self.httpListener = listenOn;
         } else {
             self.httpListener = check new (listenOn ?: DEFAULT_PORT, config);
@@ -119,18 +128,19 @@ public isolated class Listener {
     }
 }
 
-// A shared listener keeps its own configuration, so only a timeout or header limit below AgentCore's is reported.
-// A timeout of 0 disables it, which is fine.
-isolated function warnIfBelowAgentCoreDefaults(http:InferredListenerConfiguration shared) {
+// A shared listener keeps its own configuration, which `getConfig` reads back, so only a timeout or header limit below
+// AgentCore's is reported. A timeout of 0 disables it, which is fine.
+isolated function belowAgentCoreDefaults(http:InferredListenerConfiguration shared) returns string? {
     ListenerConfiguration defaults = {};
     boolean shortTimeout = shared.timeout > 0d && shared.timeout < defaults.timeout;
     boolean smallHeaders = shared.requestLimits.maxHeaderSize < defaults.requestLimits.maxHeaderSize;
-    if shortTimeout || smallHeaders {
-        log:printWarn(string `The http:Listener shared with the agentcore:Listener has timeout = ${shared.timeout} `
-            + string `and requestLimits.maxHeaderSize = ${shared.requestLimits.maxHeaderSize}. Use at least `
-            + string `${defaults.timeout} and ${defaults.requestLimits.maxHeaderSize}, or long agent turns and `
-            + "large header sets fail with a 424 from AgentCore.");
+    if !shortTimeout && !smallHeaders {
+        return ();
     }
+    return string `The http:Listener shared with the agentcore:Listener has timeout = ${shared.timeout} and `
+        + string `requestLimits.maxHeaderSize = ${shared.requestLimits.maxHeaderSize}. Use at least `
+        + string `${defaults.timeout} and ${defaults.requestLimits.maxHeaderSize}, or long agent turns and large `
+        + "header sets fail with a 424 from AgentCore.";
 }
 
 isolated function isRootBasePath(string[]|string? name) returns boolean {

@@ -55,7 +55,7 @@ AgentCore Runtime doesn't forward its request ID or runtime user ID headers to t
 
 `new agentcore:Listener()` listens on 8080. Pass a port, or an `http:Listener` to share. The `http:ListenerConfiguration` fields apply, with defaults suited to AgentCore: a 900-second timeout (AgentCore allows 15-minute synchronous requests) and 96 KB of request headers.
 
-A shared `http:Listener` keeps its own configuration. Give it `timeout: 900` and `requestLimits: {maxHeaderSize: 98304}`, or the http defaults end agent turns longer than 60 seconds and reject requests with more than 8 KB of headers.
+A shared `http:Listener` keeps its own configuration. Give it `timeout: 900` and `requestLimits: {maxHeaderSize: 98304}`, or the http defaults end agent turns longer than 60 seconds and reject requests with more than 8 KB of headers; the listener logs a warning when they are lower. Passing a configuration together with a shared `http:Listener` is an error, since it could never take effect.
 
 Streaming responses, a custom invocation path and WebSocket are not supported yet.
 
