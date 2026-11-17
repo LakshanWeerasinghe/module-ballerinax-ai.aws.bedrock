@@ -177,7 +177,7 @@ function testRecordPayload() returns error? {
 function testClosedRecordRejectsUnknownField() returns error? {
     int before = invocationCountValue();
     http:Response response = check postRaw(RECORD_PORT, "{\"id\":\"o1\",\"quantity\":3,\"extra\":true}");
-    check assertJsonResponse(response, 400, {'error: PAYLOAD_TYPE_MISMATCH_MESSAGE});
+    check assertJsonResponse(response, 400, {'error: PAYLOAD_INVALID_MESSAGE});
     test:assertEquals(invocationCountValue(), before);
 }
 
@@ -185,7 +185,7 @@ function testClosedRecordRejectsUnknownField() returns error? {
 function testMalformedJsonNotEchoed() returns error? {
     string body = "{\"secret-body-marker\": ";
     http:Response response = check postRaw(JSON_PORT, body);
-    check assertJsonResponse(response, 400, {'error: PAYLOAD_NOT_JSON_MESSAGE});
+    check assertJsonResponse(response, 400, {'error: PAYLOAD_INVALID_MESSAGE});
     test:assertFalse((check response.getTextPayload()).includes("secret-body-marker"));
 }
 
@@ -200,13 +200,13 @@ function testStringPayloadIsJsonString() returns error? {
 @test:Config
 function testStringPayloadRejectsPlainText() returns error? {
     http:Response response = check postRaw(STRING_PORT, "hello", "text/plain");
-    check assertJsonResponse(response, 400, {'error: PAYLOAD_STRING_NOT_JSON_MESSAGE});
+    check assertJsonResponse(response, 400, {'error: PAYLOAD_STRING_INVALID_MESSAGE});
 }
 
 @test:Config
 function testStringPayloadRejectsOtherJson() returns error? {
     http:Response response = check postRaw(STRING_PORT, "{\"a\":1}");
-    check assertJsonResponse(response, 400, {'error: PAYLOAD_TYPE_MISMATCH_MESSAGE});
+    check assertJsonResponse(response, 400, {'error: PAYLOAD_STRING_INVALID_MESSAGE});
 }
 
 @test:Config

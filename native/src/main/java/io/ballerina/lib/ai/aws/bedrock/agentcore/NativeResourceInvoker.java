@@ -132,28 +132,26 @@ public final class NativeResourceInvoker {
                                         Object payload, Object context) {
         Object[] args;
         BObject userService;
-        ResourceMethodType resource;
+        ResolvedResource resolved;
         try {
             userService = userService(dispatcher);
-            ResolvedResource resolved = lookup(dispatcher, accessor.getValue(), path.getStringArray());
+            resolved = lookup(dispatcher, accessor.getValue(), path.getStringArray());
             if (resolved == null) {
                 return ErrorCreator.createError(StringUtils.fromString("the agentcore:InvocationService declares no '"
-                        + describe(accessor.getValue(), path.getStringArray()) + "' resource"));
+                        + key(accessor.getValue(), path.getStringArray()) + "' resource"));
             }
             if (resolved.error() != null) {
                 return resolved.error();
             }
-            resource = resolved.resource();
             args = resolved.params().arguments(payload, context);
         } catch (BError error) {
             return error;
         }
-        String methodName = resource.getName();
+        String methodName = resolved.resource().getName();
+        boolean concurrentSafe = resolved.concurrentSafe();
         ObserverContext dispatcherContext = ObserveUtils.isObservabilityEnabled()
                 ? ObserveUtils.getObserverContextOfCurrentFrame(env) : null;
         ObserverContext userContext = dispatcherContext == null ? null : newUserContext(env, dispatcherContext);
-        ObjectType serviceType = (ObjectType) TypeUtils.getImpliedType(userService.getOriginalType());
-        boolean concurrentSafe = serviceType.isIsolated() && resource.isIsolated();
         try {
             return env.yieldAndRun(() -> concurrentSafe
                     ? callOnCurrentStrand(env.getRuntime(), userService, methodName, args)
@@ -263,6 +261,7 @@ public final class NativeResourceInvoker {
      */
     static void resolveResources(Module module, BObject dispatcher, BObject userService) {
         ServiceType serviceType = (ServiceType) TypeUtils.getReferredType(TypeUtils.getType(userService));
+        boolean serviceIsolated = ((ObjectType) TypeUtils.getImpliedType(userService.getOriginalType())).isIsolated();
         Map<String, ResolvedResource> resolved = new HashMap<>();
         for (ResourceMethodType method : serviceType.getResourceMethods()) {
             ResourceParams params = null;
@@ -273,7 +272,7 @@ public final class NativeResourceInvoker {
                 error = e;
             }
             resolved.put(key(method.getAccessor(), method.getResourcePath()), new ResolvedResource(method, params,
-                    error));
+                    error, serviceIsolated && method.isIsolated()));
         }
         dispatcher.addNativeData(RESOLVED_RESOURCES, Map.copyOf(resolved));
     }
@@ -282,9 +281,9 @@ public final class NativeResourceInvoker {
         dispatcher.addNativeData(RESOLVED_RESOURCES, null);
     }
 
-    // The resolved resource for an accessor and path, or null when the service declares none.
+    // The resolved resource for an accessor and path, or null when the service declares none. The resources are
+    // resolved when the service is linked, so they are present exactly while a service is linked.
     private static ResolvedResource lookup(BObject dispatcher, String accessor, String[] path) {
-        userService(dispatcher);
         if (!(dispatcher.getNativeData(RESOLVED_RESOURCES) instanceof Map<?, ?> resolved)) {
             throw ErrorCreator.createError(StringUtils.fromString("no agentcore:InvocationService is linked with "
                     + "the dispatcher"));
@@ -296,12 +295,10 @@ public final class NativeResourceInvoker {
         return accessor.toLowerCase(Locale.ROOT) + " " + String.join("/", path);
     }
 
-    // A resource with its parameter roles, or the error that makes it impossible to call.
-    private record ResolvedResource(ResourceMethodType resource, ResourceParams params, BError error) {
-    }
-
-    private static String describe(String accessor, String[] path) {
-        return accessor.toLowerCase(Locale.ROOT) + " " + String.join("/", path);
+    // A resource with its parameter roles, or the error that makes it impossible to call. A concurrent-safe resource
+    // is isolated and belongs to an isolated service, so it runs without the runtime's global lock.
+    private record ResolvedResource(ResourceMethodType resource, ResourceParams params, BError error,
+                                    boolean concurrentSafe) {
     }
 
     // The roles of a resource's parameters.
@@ -316,7 +313,7 @@ public final class NativeResourceInvoker {
         }
 
         static ResourceParams of(ResourceMethodType resource, Module agentCoreModule) {
-            String resourceName = describe(resource.getAccessor(), resource.getResourcePath());
+            String resourceName = key(resource.getAccessor(), resource.getResourcePath());
             Parameter[] parameters = resource.getParameters();
             ResourceParams params = new ResourceParams(parameters.length);
             for (int i = 0; i < parameters.length; i++) {

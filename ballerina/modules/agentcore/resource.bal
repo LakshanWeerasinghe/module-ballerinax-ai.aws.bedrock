@@ -26,8 +26,10 @@ const INVOCATIONS_PATH = "invocations";
 // 400 messages for a body that can't be bound. They never quote the body.
 const PAYLOAD_EMPTY_MESSAGE = "The request body is empty.";
 const PAYLOAD_UNREADABLE_MESSAGE = "The request body could not be read.";
-const PAYLOAD_NOT_JSON_MESSAGE = "The request body is not valid JSON.";
-const PAYLOAD_STRING_NOT_JSON_MESSAGE = "The request body must be JSON; a `string` payload is read as a JSON string.";
+// A failed parse doesn't say whether the body was not JSON or did not fit the type, and parsing it again to find out
+// would double the work on bodies of up to 100 MB, so one message covers both.
+const PAYLOAD_INVALID_MESSAGE = "The request body is not valid JSON, or does not match the expected payload type.";
+const PAYLOAD_STRING_INVALID_MESSAGE = "The request body must be a JSON string; a `string` payload is read as JSON.";
 const PAYLOAD_TYPE_MISMATCH_MESSAGE = "The request body does not match the expected payload type.";
 
 const NATIVE_SERVICE_ADAPTOR = "io.ballerina.lib.ai.aws.bedrock.agentcore.NativeServiceAdaptor";
@@ -80,12 +82,8 @@ isolated function bindPayloadBytes(byte[] body, typedesc<anydata> payloadType)
     if payload !is error {
         return payload;
     }
-    json|error document = trap jsondata:parseBytes(body);
-    if document !is error {
-        return payloadBindingError(PAYLOAD_TYPE_MISMATCH_MESSAGE, payload);
-    }
-    return payloadBindingError(payloadType is typedesc<string?> ? PAYLOAD_STRING_NOT_JSON_MESSAGE
-        : PAYLOAD_NOT_JSON_MESSAGE, payload);
+    return payloadBindingError(payloadType is typedesc<string?> ? PAYLOAD_STRING_INVALID_MESSAGE
+        : PAYLOAD_INVALID_MESSAGE, payload);
 }
 
 # Creates a payload binding error. Parser messages quote the body, so only the cause's type is logged, at debug.
@@ -128,11 +126,6 @@ isolated function unlinkUserService(DispatcherService dispatcher) = @java:Method
 
 isolated function registerDispatcher(InvocationService agentCoreService, Listener agentCoreListener,
         DispatcherService dispatcher) returns boolean = @java:Method {
-    'class: NATIVE_SERVICE_ADAPTOR
-} external;
-
-isolated function getDispatcher(InvocationService agentCoreService, Listener agentCoreListener)
-        returns DispatcherService? = @java:Method {
     'class: NATIVE_SERVICE_ADAPTOR
 } external;
 

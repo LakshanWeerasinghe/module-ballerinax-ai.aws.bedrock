@@ -198,12 +198,22 @@ public class AgentCoreServiceValidationTest {
         assertDiagnostics("18_root_module_only");
     }
 
+    @Test
+    public void testCompilationErrors() {
+        assertDiagnostics("19_compilation_errors", 2,
+                expect(MISSING_PING_RESOURCE, 21, 9, missingPingResource()));
+    }
+
     private static void assertDiagnostics(String packageName, ExpectedDiagnostic... expected) {
+        assertDiagnostics(packageName, 0, expected);
+    }
+
+    private static void assertDiagnostics(String packageName, int otherErrorCount, ExpectedDiagnostic... expected) {
         DiagnosticResult result = compile(packageName);
         List<Diagnostic> otherErrors = result.errors().stream()
                 .filter(diagnostic -> !isAgentCoreDiagnostic(diagnostic))
                 .collect(Collectors.toList());
-        Assert.assertTrue(otherErrors.isEmpty(), "Unexpected compilation errors: " + describe(otherErrors));
+        Assert.assertEquals(otherErrors.size(), otherErrorCount, "Compilation errors: " + describe(otherErrors));
 
         List<Diagnostic> actual = result.diagnostics().stream()
                 .filter(AgentCoreServiceValidationTest::isAgentCoreDiagnostic)

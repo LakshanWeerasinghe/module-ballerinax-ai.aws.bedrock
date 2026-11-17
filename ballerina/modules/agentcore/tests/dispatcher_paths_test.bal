@@ -15,6 +15,7 @@
 // under the License.
 
 import ballerina/http;
+import ballerina/lang.runtime;
 import ballerina/test;
 
 // Services the compiler plugin would reject. They reach the dispatcher only when the plugin doesn't run, as in these
@@ -25,6 +26,7 @@ const BAD_PING_VALUE_PORT = 19702;
 const NO_INVOCATIONS_PORT = 19703;
 const BAD_INVOCATIONS_PARAM_PORT = 19704;
 const STREAM_CLOSE_FAILS_PORT = 19705;
+const DETACH_IN_FLIGHT_PORT = 19707;
 
 isolated class FailingCloseStream {
     public isolated function next() returns record {|string value;|}|error? => {value: "chunk"};
@@ -105,19 +107,35 @@ function testStreamWhoseCloseFails() returns error? {
 function testDispatcherRegistry() returns error? {
     Listener agentCoreListener = check new (19706);
     InvocationService agentCoreService = newPingService();
-    test:assertTrue(getDispatcher(agentCoreService, agentCoreListener) is ());
     check agentCoreListener.attach(agentCoreService);
-    DispatcherService? dispatcher = getDispatcher(agentCoreService, agentCoreListener);
-    if dispatcher is () {
-        test:assertFail("no dispatcher registered after attach");
-    }
-    test:assertTrue(getUserService(dispatcher) === agentCoreService);
-    test:assertTrue(getResourceSignature(dispatcher, "get", ["ping"]) is ResourceSignature);
+    error? again = agentCoreListener.attach(agentCoreService);
+    test:assertTrue(again is error && again.message().includes("already attached"));
     check agentCoreListener.detach(agentCoreService);
-    test:assertTrue(getDispatcher(agentCoreService, agentCoreListener) is ());
-    test:assertTrue(getUserService(dispatcher) is ());
-    // Detach drops the resources resolved at attach along with the service link.
-    test:assertTrue(getResourceSignature(dispatcher, "get", ["ping"]) is error);
+    check agentCoreListener.detach(agentCoreService);
+    check agentCoreListener.attach(agentCoreService);
+    check agentCoreListener.detach(agentCoreService);
+}
+
+@test:Config
+function testDetachLetsInFlightRequestFinish() returns error? {
+    InvocationService agentCoreService = service object {
+        resource function get ping() returns PingStatus => HEALTHY;
+
+        resource function post invocations() returns json {
+            runtime:sleep(1.5);
+            return "finished";
+        }
+    };
+    Listener agentCoreListener = check startOn(DETACH_IN_FLIGHT_PORT, agentCoreService);
+    http:Client cl = check clientFor(DETACH_IN_FLIGHT_PORT);
+    future<http:Response|error> call = start postInvocation(cl, {});
+    runtime:sleep(0.5);
+    check agentCoreListener.detach(agentCoreService);
+    http:Response finished = check wait call;
+    check assertRawJson(finished, 200, "\"finished\"");
+    http:Response afterDetach = check postInvocation(cl, {});
+    test:assertEquals(afterDetach.statusCode, 404);
+    check agentCoreListener.immediateStop();
 }
 
 @test:Config

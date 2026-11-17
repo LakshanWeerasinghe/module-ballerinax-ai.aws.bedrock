@@ -79,13 +79,6 @@ public final class NativeServiceAdaptor {
         }
     }
 
-    public static Object getDispatcher(BObject userService, BObject listener) {
-        synchronized (DISPATCHERS_LOCK) {
-            Dispatchers dispatchers = dispatchersOf(userService, false);
-            return dispatchers == null ? null : dispatchers.byListener.get(listener);
-        }
-    }
-
     public static Object removeDispatcher(BObject userService, BObject listener) {
         synchronized (DISPATCHERS_LOCK) {
             Dispatchers dispatchers = dispatchersOf(userService, false);

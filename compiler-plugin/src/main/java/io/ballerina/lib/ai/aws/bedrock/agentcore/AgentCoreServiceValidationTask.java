@@ -47,6 +47,7 @@ import io.ballerina.compiler.syntax.tree.SyntaxKind;
 import io.ballerina.compiler.syntax.tree.Token;
 import io.ballerina.projects.plugins.AnalysisTask;
 import io.ballerina.projects.plugins.SyntaxNodeAnalysisContext;
+import io.ballerina.tools.diagnostics.Diagnostic;
 import io.ballerina.tools.diagnostics.DiagnosticSeverity;
 import io.ballerina.tools.diagnostics.Location;
 import io.ballerina.tools.text.LineRange;
@@ -133,7 +134,7 @@ public class AgentCoreServiceValidationTask implements AnalysisTask<SyntaxNodeAn
     private static void validateServiceDeclaration(SyntaxNodeAnalysisContext context, SemanticModel semanticModel,
                                                    TypeSymbol serviceType, ServiceDeclarationNode service) {
         if (!isAgentCoreServiceDeclaration(semanticModel, serviceType, service)
-                || hasCompilationErrors(semanticModel)) {
+                || hasCompilationErrors(semanticModel, service)) {
             return;
         }
         validateBasePath(context, service.absoluteResourcePath());
@@ -190,7 +191,7 @@ public class AgentCoreServiceValidationTask implements AnalysisTask<SyntaxNodeAn
         }
         Optional<Symbol> symbol = semanticModel.symbol(serviceClass);
         if (symbol.isEmpty() || !(symbol.get() instanceof TypeSymbol classType)
-                || !classType.subtypeOf(serviceType) || hasCompilationErrors(semanticModel)) {
+                || !classType.subtypeOf(serviceType) || hasCompilationErrors(semanticModel, serviceClass)) {
             return;
         }
         new ServiceValidator(context, semanticModel).validate(serviceClass.members(),
@@ -204,7 +205,7 @@ public class AgentCoreServiceValidationTask implements AnalysisTask<SyntaxNodeAn
             return;
         }
         Optional<TypeSymbol> type = semanticModel.typeOf(constructor);
-        if (type.isEmpty() || !type.get().subtypeOf(serviceType) || hasCompilationErrors(semanticModel)) {
+        if (type.isEmpty() || !type.get().subtypeOf(serviceType) || hasCompilationErrors(semanticModel, constructor)) {
             return;
         }
         Node first = constructor.objectTypeQualifiers().isEmpty() ? constructor.objectKeyword()
@@ -253,10 +254,14 @@ public class AgentCoreServiceValidationTask implements AnalysisTask<SyntaxNodeAn
         private final Optional<TypeSymbol> invocationsReturnType;
         // `agentcore:PingStatus|error`.
         private final Optional<TypeSymbol> pingReturnType;
+        // An error elsewhere in the module can leave a type used here unresolved, so the rules that depend on types
+        // are skipped until the module is clean. The structural rules still run.
+        private final boolean checkTypes;
 
         ServiceValidator(SyntaxNodeAnalysisContext context, SemanticModel semanticModel) {
             this.context = context;
             this.semanticModel = semanticModel;
+            this.checkTypes = !containsError(semanticModel.diagnostics());
             this.anydataType = semanticModel.types().ANYDATA;
             this.errorType = semanticModel.types().ERROR;
             this.httpResponseType = resolveType(semanticModel, BALLERINA_ORG, HTTP_MODULE, HTTP_RESPONSE_TYPE);
@@ -315,7 +320,7 @@ public class AgentCoreServiceValidationTask implements AnalysisTask<SyntaxNodeAn
                 return;
             }
             Optional<TypeSymbol> returnType = resourceReturnType(resource);
-            if (returnType.isEmpty() || pingReturnType.isEmpty()) {
+            if (!checkTypes || returnType.isEmpty() || pingReturnType.isEmpty()) {
                 return;
             }
             if (!returnType.get().subtypeOf(pingReturnType.get())) {
@@ -341,7 +346,7 @@ public class AgentCoreServiceValidationTask implements AnalysisTask<SyntaxNodeAn
                 if (hasPayloadAnnotation(parameterSymbol)) {
                     if (hasPayload) {
                         report(DUPLICATE_PAYLOAD_PARAMETER, parameter.location());
-                    } else if (!type.subtypeOf(anydataType)) {
+                    } else if (checkTypes && !type.subtypeOf(anydataType)) {
                         Node typeNode = parameterTypeNode(parameter);
                         Location location = typeNode != null ? typeNode.location() : parameter.location();
                         String typeText = typeNode != null ? typeNode.toSourceCode().trim() : type.signature();
@@ -363,7 +368,7 @@ public class AgentCoreServiceValidationTask implements AnalysisTask<SyntaxNodeAn
         private void validateInvocationsReturnType(FunctionDefinitionNode resource) {
             Optional<ReturnTypeDescriptorNode> returnTypeNode = resource.functionSignature().returnTypeDesc();
             Optional<TypeSymbol> returnType = resourceReturnType(resource);
-            if (returnTypeNode.isEmpty() || returnType.isEmpty()) {
+            if (!checkTypes || returnTypeNode.isEmpty() || returnType.isEmpty()) {
                 return;
             }
             List<TypeSymbol> members = new ArrayList<>();
@@ -516,9 +521,13 @@ public class AgentCoreServiceValidationTask implements AnalysisTask<SyntaxNodeAn
         return false;
     }
 
-    // With compilation errors the types the rules depend on may not resolve, and the compiler already reports them.
-    private static boolean hasCompilationErrors(SemanticModel semanticModel) {
-        return semanticModel.diagnostics().stream()
+    // An error inside the service may leave its own symbols unresolved, and the compiler already reports it.
+    private static boolean hasCompilationErrors(SemanticModel semanticModel, Node node) {
+        return containsError(semanticModel.diagnostics(node.lineRange()));
+    }
+
+    private static boolean containsError(List<Diagnostic> diagnostics) {
+        return diagnostics.stream()
                 .anyMatch(diagnostic -> diagnostic.diagnosticInfo().severity() == DiagnosticSeverity.ERROR);
     }
 

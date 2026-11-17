@@ -42,10 +42,7 @@ public isolated class Listener {
     # + return - An error if the listener cannot be created
     public isolated function init(int|http:Listener? listenOn = (), *ListenerConfiguration config) returns error? {
         if listenOn is http:Listener {
-            // A shared listener's configuration can't be read back, so its timeout and header limit can't be checked.
-            log:printWarn("The agentcore:Listener shares an http:Listener, so the AgentCore defaults don't apply to it. "
-                + "Create it with timeout = 900 and requestLimits.maxHeaderSize = 98304, or long agent turns and "
-                + "large header sets fail with a 424 from AgentCore.");
+            warnIfBelowAgentCoreDefaults(listenOn.getConfig());
             self.httpListener = listenOn;
         } else {
             self.httpListener = check new (listenOn ?: DEFAULT_PORT, config);
@@ -90,10 +87,14 @@ public isolated class Listener {
         }
         error? result = self.httpListener.detach(dispatcher);
         if result is error {
-            _ = registerDispatcher(agentCoreService, self, dispatcher);
+            if !registerDispatcher(agentCoreService, self, dispatcher) {
+                log:printError("The agentcore:InvocationService is still attached to the http:Listener after a "
+                    + "failed detach, but another attach replaced its record, so detach can no longer reach it.");
+            }
             return result;
         }
-        unlinkUserService(dispatcher);
+        // The dispatcher stays linked: requests that http accepted before the detach still run to completion, and the
+        // dispatcher is released once they finish.
     }
 
     # Starts the listener.
@@ -115,6 +116,20 @@ public isolated class Listener {
     # + return - An error if the listener cannot be stopped
     public isolated function immediateStop() returns error? {
         check self.httpListener.immediateStop();
+    }
+}
+
+// A shared listener keeps its own configuration, so only a timeout or header limit below AgentCore's is reported.
+// A timeout of 0 disables it, which is fine.
+isolated function warnIfBelowAgentCoreDefaults(http:InferredListenerConfiguration shared) {
+    ListenerConfiguration defaults = {};
+    boolean shortTimeout = shared.timeout > 0d && shared.timeout < defaults.timeout;
+    boolean smallHeaders = shared.requestLimits.maxHeaderSize < defaults.requestLimits.maxHeaderSize;
+    if shortTimeout || smallHeaders {
+        log:printWarn(string `The http:Listener shared with the agentcore:Listener has timeout = ${shared.timeout} `
+            + string `and requestLimits.maxHeaderSize = ${shared.requestLimits.maxHeaderSize}. Use at least `
+            + string `${defaults.timeout} and ${defaults.requestLimits.maxHeaderSize}, or long agent turns and `
+            + "large header sets fail with a 424 from AgentCore.");
     }
 }
 
