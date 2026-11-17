@@ -283,8 +283,9 @@ function testXmlElementPayloadRejected() returns error? {
     });
 }
 
-// At runtime the `string:RegExp` member of the union is a reference whose implied type is `anydata`, so the runtime
-// check misses it and binds a JSON object to it. The compiler plugin rejects the type.
+// Known gap, left as is: at runtime the `string:RegExp` member of the union is a reference whose implied type is
+// `anydata`, so the runtime check misses it and binds a JSON object to it. The compiler plugin rejects the type and is
+// the gate; the runtime check is defence in depth, and matching the type by name and module would be brittle.
 @test:Config {enable: false}
 function testOptionalRegExpPayloadRejected() returns error? {
     check assertUnbindablePayload(OPTIONAL_REGEXP_PAYLOAD_PORT, service object {

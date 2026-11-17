@@ -404,7 +404,8 @@ function testDecimalAndNegativeZeroResults() returns error? {
     check assertRawJson(check invokeEdgeKind("negativeZero"), 200, "-0.0");
 }
 
-// A float that JSON can't represent must not reach the caller as a `200` with an invalid JSON body.
+// Known gap, left as is: `toJsonString` writes `NaN` and `Infinity`, so such a result reaches the caller as a `200`
+// with a body that isn't valid JSON. A finite-number check would walk every response on the success path.
 @test:Config {enable: false}
 function testNonFiniteFloatResultIsNotInvalidJson() returns error? {
     foreach string kind in ["nan", "infinity"] {
