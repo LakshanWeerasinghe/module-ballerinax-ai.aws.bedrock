@@ -18,8 +18,9 @@ import ballerina/http;
 
 # A service that runs on Amazon Bedrock AgentCore Runtime under the HTTP protocol.
 # It declares `resource function get ping()` and `resource function post invocations(...)`.
+// Not an `http:Service`, so it can't be attached to an `http:Listener` directly and bypass the dispatcher, which
+// gives it the AgentCore status codes, error bodies and ping timestamp.
 public type InvocationService distinct service object {
-    *http:Service;
 };
 
 # The configuration of an `agentcore:Listener`.

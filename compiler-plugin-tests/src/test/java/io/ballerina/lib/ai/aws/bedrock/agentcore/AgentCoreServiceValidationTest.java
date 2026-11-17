@@ -204,6 +204,11 @@ public class AgentCoreServiceValidationTest {
                 expect(MISSING_PING_RESOURCE, 21, 9, missingPingResource()));
     }
 
+    @Test
+    public void testHttpListenerRejected() {
+        assertDiagnostics("20_http_listener_rejected", 1);
+    }
+
     private static void assertDiagnostics(String packageName, ExpectedDiagnostic... expected) {
         assertDiagnostics(packageName, 0, expected);
     }
