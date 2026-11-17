@@ -112,6 +112,8 @@ function testTimeOfLastUpdateChangesOnlyOnStatusChange() returns error? {
 function testPingErrorReportsHealthyWithoutTimestamp() returns error? {
     setPing(HEALTHY_BUSY);
     int busySince = check (check ping())["time_of_last_update"].ensureType();
+    // The timestamp has whole-second resolution, so a fallback that rewrote the tracker would show only after a second.
+    runtime:sleep(1.1);
     setPing(HEALTHY_BUSY, fails = true);
     test:assertEquals(check ping(), {status: "Healthy"});
     setPing(HEALTHY_BUSY, panics = true);

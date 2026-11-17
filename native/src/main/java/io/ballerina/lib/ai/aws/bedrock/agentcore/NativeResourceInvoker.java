@@ -41,7 +41,6 @@ import io.ballerina.runtime.observability.ObservabilityConstants;
 import io.ballerina.runtime.observability.ObserveUtils;
 import io.ballerina.runtime.observability.ObserverContext;
 
-import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Locale;
 import java.util.Map;
@@ -74,6 +73,8 @@ public final class NativeResourceInvoker {
     private static final String PAYLOAD_TYPE_FIELD = "payloadType";
     private static final String HAS_CONTEXT_FIELD = "hasContext";
     private static final String HTTP_HEADERS_TYPE = "Headers";
+    // The resolved resources of the linked service, kept on the dispatcher beside the service and dropped with it.
+    private static final String RESOLVED_RESOURCES = "AI_AWS_BEDROCK_AGENTCORE_RESOLVED_RESOURCES";
     private static final BString HTTP_HEADERS_REQUEST_FIELD = StringUtils.fromString("request");
     private static final String ENTRYPOINT_FUNCTION_MODULE_TAG = "entrypoint.function.module";
     private static final String ENTRYPOINT_SERVICE_NAME_TAG = "entrypoint.service.name";
@@ -96,12 +97,14 @@ public final class NativeResourceInvoker {
     public static Object getResourceSignature(Environment env, BObject dispatcher, BString accessor, BArray path) {
         Module module = env.getCurrentModule();
         try {
-            ResourceMethodType resource = findResource(userService(dispatcher), accessor.getValue(),
-                    path.getStringArray());
-            if (resource == null) {
+            ResolvedResource resolved = lookup(dispatcher, accessor.getValue(), path.getStringArray());
+            if (resolved == null) {
                 return null;
             }
-            ResourceParams params = ResourceParams.of(resource, module);
+            if (resolved.error() != null) {
+                return resolved.error();
+            }
+            ResourceParams params = resolved.params();
             Map<String, Object> fields = new HashMap<>();
             fields.put(PAYLOAD_TYPE_FIELD, params.payloadIndex < 0 ? null
                     : ValueCreator.createTypedescValue(params.payloadType));
@@ -127,18 +130,21 @@ public final class NativeResourceInvoker {
      */
     public static Object invokeResource(Environment env, BObject dispatcher, BString accessor, BArray path,
                                         Object payload, Object context) {
-        Module module = env.getCurrentModule();
         Object[] args;
         BObject userService;
         ResourceMethodType resource;
         try {
             userService = userService(dispatcher);
-            resource = findResource(userService, accessor.getValue(), path.getStringArray());
-            if (resource == null) {
+            ResolvedResource resolved = lookup(dispatcher, accessor.getValue(), path.getStringArray());
+            if (resolved == null) {
                 return ErrorCreator.createError(StringUtils.fromString("the agentcore:InvocationService declares no '"
                         + describe(accessor.getValue(), path.getStringArray()) + "' resource"));
             }
-            args = ResourceParams.of(resource, module).arguments(payload, context);
+            if (resolved.error() != null) {
+                return resolved.error();
+            }
+            resource = resolved.resource();
+            args = resolved.params().arguments(payload, context);
         } catch (BError error) {
             return error;
         }
@@ -246,14 +252,52 @@ public final class NativeResourceInvoker {
                 + "the dispatcher"));
     }
 
-    private static ResourceMethodType findResource(BObject userService, String accessor, String[] path) {
+    /**
+     * Resolves every resource of the user's service and its parameter roles, once, when the service is linked with the
+     * dispatcher. They can't change while the service is attached, so requests read the result instead of searching.
+     * A resource with a parameter the dispatcher can't supply keeps its error, which every request then returns.
+     *
+     * @param module      the agentcore module
+     * @param dispatcher  the dispatcher
+     * @param userService the user's service
+     */
+    static void resolveResources(Module module, BObject dispatcher, BObject userService) {
         ServiceType serviceType = (ServiceType) TypeUtils.getReferredType(TypeUtils.getType(userService));
+        Map<String, ResolvedResource> resolved = new HashMap<>();
         for (ResourceMethodType method : serviceType.getResourceMethods()) {
-            if (accessor.equalsIgnoreCase(method.getAccessor()) && Arrays.equals(path, method.getResourcePath())) {
-                return method;
+            ResourceParams params = null;
+            BError error = null;
+            try {
+                params = ResourceParams.of(method, module);
+            } catch (BError e) {
+                error = e;
             }
+            resolved.put(key(method.getAccessor(), method.getResourcePath()), new ResolvedResource(method, params,
+                    error));
         }
-        return null;
+        dispatcher.addNativeData(RESOLVED_RESOURCES, Map.copyOf(resolved));
+    }
+
+    static void dropResolvedResources(BObject dispatcher) {
+        dispatcher.addNativeData(RESOLVED_RESOURCES, null);
+    }
+
+    // The resolved resource for an accessor and path, or null when the service declares none.
+    private static ResolvedResource lookup(BObject dispatcher, String accessor, String[] path) {
+        userService(dispatcher);
+        if (!(dispatcher.getNativeData(RESOLVED_RESOURCES) instanceof Map<?, ?> resolved)) {
+            throw ErrorCreator.createError(StringUtils.fromString("no agentcore:InvocationService is linked with "
+                    + "the dispatcher"));
+        }
+        return resolved.get(key(accessor, path)) instanceof ResolvedResource resource ? resource : null;
+    }
+
+    private static String key(String accessor, String[] path) {
+        return accessor.toLowerCase(Locale.ROOT) + " " + String.join("/", path);
+    }
+
+    // A resource with its parameter roles, or the error that makes it impossible to call.
+    private record ResolvedResource(ResourceMethodType resource, ResourceParams params, BError error) {
     }
 
     private static String describe(String accessor, String[] path) {

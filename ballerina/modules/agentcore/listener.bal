@@ -15,6 +15,7 @@
 // under the License.
 
 import ballerina/http;
+import ballerina/log;
 
 // The listener follows the AgentCore Runtime HTTP protocol contract. Sources cited in this module:
 // - AWS devguide: runtime-http-protocol-contract, runtime-service-contract, runtime-header-allowlist,
@@ -35,11 +36,16 @@ public isolated class Listener {
 
     # Initializes the listener.
     #
-    # + listenOn - The port, or an `http:Listener` to share. Defaults to 8080
+    # + listenOn - The port (8080 by default), or an `http:Listener` to share. Create a shared one with
+    #              `timeout = 900` and `requestLimits = {maxHeaderSize: 98304}`, or the http defaults apply
     # + config - The listener configuration, used only when the listener creates its own `http:Listener`
     # + return - An error if the listener cannot be created
     public isolated function init(int|http:Listener? listenOn = (), *ListenerConfiguration config) returns error? {
         if listenOn is http:Listener {
+            // A shared listener's configuration can't be read back, so its timeout and header limit can't be checked.
+            log:printWarn("The agentcore:Listener shares an http:Listener, so the AgentCore defaults don't apply to it. "
+                + "Create it with timeout = 900 and requestLimits.maxHeaderSize = 98304, or long agent turns and "
+                + "large header sets fail with a 424 from AgentCore.");
             self.httpListener = listenOn;
         } else {
             self.httpListener = check new (listenOn ?: DEFAULT_PORT, config);

@@ -18,6 +18,7 @@
 
 package io.ballerina.lib.ai.aws.bedrock.agentcore;
 
+import io.ballerina.runtime.api.Environment;
 import io.ballerina.runtime.api.values.BObject;
 
 import java.util.IdentityHashMap;
@@ -44,7 +45,8 @@ public final class NativeServiceAdaptor {
     private NativeServiceAdaptor() {
     }
 
-    public static void setUserService(BObject dispatcher, BObject userService) {
+    public static void setUserService(Environment env, BObject dispatcher, BObject userService) {
+        NativeResourceInvoker.resolveResources(env.getCurrentModule(), dispatcher, userService);
         dispatcher.addNativeData(USER_SERVICE, userService);
     }
 
@@ -60,6 +62,7 @@ public final class NativeServiceAdaptor {
 
     public static void unlinkUserService(BObject dispatcher) {
         dispatcher.addNativeData(USER_SERVICE, null);
+        NativeResourceInvoker.dropResolvedResources(dispatcher);
     }
 
     /**

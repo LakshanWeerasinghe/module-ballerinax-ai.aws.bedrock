@@ -112,9 +112,12 @@ function testDispatcherRegistry() returns error? {
         test:assertFail("no dispatcher registered after attach");
     }
     test:assertTrue(getUserService(dispatcher) === agentCoreService);
+    test:assertTrue(getResourceSignature(dispatcher, "get", ["ping"]) is ResourceSignature);
     check agentCoreListener.detach(agentCoreService);
     test:assertTrue(getDispatcher(agentCoreService, agentCoreListener) is ());
     test:assertTrue(getUserService(dispatcher) is ());
+    // Detach drops the resources resolved at attach along with the service link.
+    test:assertTrue(getResourceSignature(dispatcher, "get", ["ping"]) is error);
 }
 
 @test:Config

@@ -66,6 +66,20 @@ Since June 30, 2026, AgentCore Runtime rejects invocations of a runtime whose `m
 
 Two things here are untested. Whether `UpdateAgentRuntime` replaces or merges optional fields you leave out is untested, so the update below re-sends every field the create call set: losing the environment variables would stop the agent at startup. And the rejection itself was not exercised, because the runtime this example was tested on already had the flag set. The troubleshooting page's sample passes only the runtime ID and `metadataConfiguration`; the AWS CLI and boto3 reject that call, because `agentRuntimeArtifact` and `roleArn` are required.
 
+`create-agent-runtime` returns while the runtime is still `CREATING`, and an update before it reaches `READY` fails with `ConflictException`. Wait for it first:
+
+```bash
+while true; do
+  STATUS=$(aws bedrock-agentcore-control get-agent-runtime --region <REGION> \
+    --agent-runtime-id <AGENT_RUNTIME_ID> --query status --output text)
+  [ "$STATUS" = READY ] && break
+  [ "$STATUS" = CREATE_FAILED ] && { echo "The runtime failed to create; check its status reason."; exit 1; }
+  sleep 5
+done
+```
+
+Then update it:
+
 ```bash
 aws bedrock-agentcore-control update-agent-runtime \
   --region <REGION> \
