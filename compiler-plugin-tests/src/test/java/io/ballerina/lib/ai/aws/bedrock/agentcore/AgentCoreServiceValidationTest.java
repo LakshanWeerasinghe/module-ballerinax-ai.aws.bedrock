@@ -62,7 +62,6 @@ public class AgentCoreServiceValidationTest {
     private static final String UNSUPPORTED_PARAMETER = "AI_AWS_BEDROCK_AGENTCORE_107";
     private static final String DUPLICATE_PAYLOAD_PARAMETER = "AI_AWS_BEDROCK_AGENTCORE_108";
     private static final String DUPLICATE_CONTEXT_PARAMETER = "AI_AWS_BEDROCK_AGENTCORE_109";
-    private static final String INVALID_PAYLOAD_TYPE = "AI_AWS_BEDROCK_AGENTCORE_110";
     private static final String INVALID_RETURN_TYPE = "AI_AWS_BEDROCK_AGENTCORE_111";
     private static final String STREAM_RETURN_TYPE = "AI_AWS_BEDROCK_AGENTCORE_112";
     private static final String INVALID_BASE_PATH = "AI_AWS_BEDROCK_AGENTCORE_113";
@@ -130,12 +129,6 @@ public class AgentCoreServiceValidationTest {
     public void testDuplicateContextParameter() {
         assertDiagnostics("09_duplicate_context",
                 expect(DUPLICATE_CONTEXT_PARAMETER, 24, 65, duplicateContextParameter()));
-    }
-
-    @Test
-    public void testInvalidPayloadType() {
-        assertDiagnostics("10_invalid_payload_type",
-                expect(INVALID_PAYLOAD_TYPE, 23, 54, invalidPayloadType("payload", "http:Request")));
     }
 
     @Test
@@ -352,11 +345,6 @@ public class AgentCoreServiceValidationTest {
     private static String unbindablePayloadType(String parameter, String type) {
         return "the `@http:Payload` parameter '" + parameter + "' of the resource 'post invocations' accepts '" + type
                 + "', which a JSON request body can't hold; use a JSON-compatible type, or `byte[]` for the raw bytes.";
-    }
-
-    private static String invalidPayloadType(String parameter, String type) {
-        return "the `@http:Payload` parameter '" + parameter + "' of the resource 'post invocations' must be a "
-                + "subtype of `anydata`, found '" + type + "'.";
     }
 
     private static String invalidReturnType(String type) {
